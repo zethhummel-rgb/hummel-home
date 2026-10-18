@@ -4,8 +4,9 @@ self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('push',event=>{
  let payload={};try{payload=event.data?.json()||{}}catch{}
  const url=new URL(self.registration.scope);
- if(typeof payload.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(payload.date))url.searchParams.set('reminder_date',payload.date);
- if(typeof payload.eventId==='string'&&payload.eventId.length<=1200)url.searchParams.set('reminder_event',payload.eventId);
+ if(typeof payload.taskId==='string'&&/^[a-f0-9-]{36}$/.test(payload.taskId))url.searchParams.set('reminder_task',payload.taskId);
+ else if(typeof payload.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(payload.date))url.searchParams.set('reminder_date',payload.date);
+ if(!payload.taskId&&typeof payload.eventId==='string'&&payload.eventId.length<=1200)url.searchParams.set('reminder_event',payload.eventId);
  event.waitUntil(self.registration.showNotification(typeof payload.title==='string'?payload.title:'Hummel Home',{
   body:typeof payload.body==='string'?payload.body:'A reminder from your family calendar.',
   icon:new URL('icons/hh-script-192.png',self.registration.scope).href,

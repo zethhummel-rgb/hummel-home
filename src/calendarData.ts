@@ -13,6 +13,11 @@ export function zonedISO(date:string,time='00:00'){
  for(let i=0;i<3;i++){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(guess);const p=Object.fromEntries(parts.map(p=>[p.type,p.value]));const represented=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);guess+=target-represented}
  const result=new Date(guess);const actual=new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(result);if(dayKey(result)!==date||actual!==time)throw Error('That time does not exist because the clocks change. Choose another time.');return result.toISOString();
 }
+export function halfHourAfter(date:string,time:string){
+ if(!/^\d{2}:\d{2}$/.test(time))return null;
+ const [hour,minute]=time.split(':').map(Number);if(hour>23||minute>59)return null;
+ const total=hour*60+minute+30;return {date:total>=1440?shiftDay(date,1):date,time:`${String(Math.floor(total/60)%24).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`};
+}
 export function eventDate(e:FamilyEvent){return e.all_day?e.start_date!:dayKey(new Date(e.starts_at))}
 export function eventEndDate(e:FamilyEvent){return e.all_day?shiftDay(e.end_date!,-1):dayKey(new Date(new Date(e.ends_at).getTime()-1))}
 export function timePart(value:string){return new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value))}

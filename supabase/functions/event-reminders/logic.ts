@@ -1,4 +1,4 @@
-export type ReminderEvent={id:string;title:string;location?:string;person?:string;person_ids?:string[]|null;reminder_minutes?:number|null;starts_at:string;all_day:boolean;start_date?:string|null};
+export type ReminderEvent={id:string;task_id?:string;title:string;location?:string;person?:string;person_ids?:string[]|null;reminder_minutes?:number|null;starts_at:string;all_day:boolean;start_date?:string|null};
 export type ReminderMember={user_id:string;display_name:string};
 export function validSubscription(value:any){
  if(!value||typeof value.endpoint!=='string'||value.endpoint.length>4096)throw Error('Invalid notification subscription.');
@@ -36,5 +36,5 @@ export function deliveryKey(e:ReminderEvent){return `${e.id}:${e.all_day?e.start
 export function notificationPayload(e:ReminderEvent){
  const date=e.all_day?new Date(e.start_date+'T12:00:00Z'):new Date(e.starts_at);
  const when=new Intl.DateTimeFormat('en-CA',{timeZone:e.all_day?'UTC':'America/Toronto',weekday:'short',month:'short',day:'numeric',...(e.all_day?{}:{hour:'numeric',minute:'2-digit'})}).format(date);
- return {title:e.title.slice(0,160),body:(when+(e.all_day?' · All day':' Eastern')+(e.location?' · '+e.location:'')).slice(0,350),eventId:e.id,date:e.all_day?e.start_date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(date),tag:deliveryKey(e)};
+ return {title:e.title.slice(0,160),body:(when+(e.all_day?' · All day':' Eastern')+(e.location?' · '+e.location:'')).slice(0,350),eventId:e.task_id?undefined:e.id,taskId:e.task_id,date:e.all_day?e.start_date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(date),tag:deliveryKey(e)};
 }

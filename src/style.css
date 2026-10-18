@@ -234,3 +234,6 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 .family-strip .family-chip .person-dot{width:6px;height:6px;border:0;opacity:.72}
 
 .notification-settings{padding:0 0 24px;margin:0 0 24px;border-bottom:1px solid #eadbe1}.notification-heading{display:flex;align-items:center;gap:9px;color:#8a5065}.notification-heading h3{margin:0}.notification-settings>p{font-size:13px;line-height:1.65;color:#89767e}.notification-actions{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:14px}.notification-state{display:flex;gap:6px;align-items:center;color:#57947c;font-size:12px}.reminder-settings{margin:8px 0 16px}.notification-settings .setup-note{margin:12px 0;padding:13px;border-radius:12px;background:#fbf0f4}.notification-settings .error{color:#9a4c56}
+
+.task-repeat{display:flex!important;align-items:center;gap:4px;color:#a48d98!important;font-size:10px!important}.reminder-edit{color:#a78897}.reminder-highlight{background:#fbf0f4;border-radius:12px;outline:1px solid #e5c9d5}.reminder-modal .repeat-settings{margin-bottom:20px}.reminder-modal .event-fields{margin-bottom:18px}
+@media(max-width:600px){.reminder-item{gap:8px}.reminder-item .tag{max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.reminder-edit{padding:5px}}

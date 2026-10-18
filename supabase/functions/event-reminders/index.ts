@@ -40,16 +40,7 @@ async function dispatch(keys:any){
    try{
     const devices=await service('devices',{householdId});
     const membership=await admin.from('household_members').select('user_id,display_name').eq('household_id',householdId);if(membership.error)throw Error('Membership unavailable');
-    const connection=await calendar(householdId);let events:ReminderEvent[];
-    const now=Date.now();
-    if(connection){
-     if(!connection.migrationComplete)continue;
-     const owner=await admin.from('households').select('owner_id').eq('id',householdId).single();if(owner.error||owner.data.owner_id!==connection.userId)continue;
-     events=await googleEvents(connection,now);
-    }else{
-     const r=await admin.from('household_events').select('*').eq('household_id',householdId).not('reminder_minutes','is',null).gte('starts_at',new Date(now-86400000).toISOString()).lte('starts_at',new Date(now+8*86400000).toISOString()).limit(2001);if(r.error||r.data.length>2000)throw Error('Calendar read failed');events=r.data;
-    }
-    report.households++;
+    async function deliver(events:ReminderEvent[]){
     for(const event of events.filter(e=>isDue(e,Date.now()))){
      const users=recipients(event,membership.data),key=deliveryKey(event);
      for(const device of devices.filter((d:any)=>users.includes(d.user_id))){
@@ -58,6 +49,24 @@ async function dispatch(keys:any){
       try{const state=await send(device,notificationPayload(event),keys);if(state==='sent')report.sent++;await service('finish',{deviceId:device.id,key,state})}catch{report.failed++}
      }
     }
+    }
+    const now=Date.now();
+    // Household reminders stay independent of the Google connection.
+    try{
+     const tasks=await admin.from('household_items').select('id,title,person,remind_at').eq('household_id',householdId).eq('kind','task').eq('done',false).gte('remind_at',new Date(now-5*60000).toISOString()).lte('remind_at',new Date(now).toISOString()).limit(2001);
+     if(tasks.error||tasks.data.length>2000)throw Error('Reminder read failed');
+     await deliver(tasks.data.map((t:any)=>({id:'task:'+t.id,task_id:t.id,title:t.title,person:t.person,starts_at:t.remind_at,all_day:false,reminder_minutes:0})));
+    }catch{report.failed++}
+    const connection=await calendar(householdId);let events:ReminderEvent[];
+    if(connection){
+     if(!connection.migrationComplete)continue;
+     const owner=await admin.from('households').select('owner_id').eq('id',householdId).single();if(owner.error||owner.data.owner_id!==connection.userId)continue;
+     events=await googleEvents(connection,now);
+    }else{
+     const r=await admin.from('household_events').select('*').eq('household_id',householdId).not('reminder_minutes','is',null).gte('starts_at',new Date(now-86400000).toISOString()).lte('starts_at',new Date(now+8*86400000).toISOString()).limit(2001);if(r.error||r.data.length>2000)throw Error('Calendar read failed');events=r.data;
+    }
+    report.households++;
+    await deliver(events);
    }catch{report.failed++}
   }
   return report;
