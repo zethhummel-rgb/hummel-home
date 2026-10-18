@@ -178,3 +178,26 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 .refresh-home{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;border-radius:12px;background:transparent;color:#8b4f65;flex-shrink:0}
 .refresh-home:hover{background:#faeaf1}
 .refresh-home svg{flex-shrink:0}
+
+/* Repeat options stay inside the event form, with an explicit edit scope. */
+.event-fields{border:0;padding:0;margin:0;min-width:0}
+.repeat-settings,.series-scope{padding:16px;background:#fff7fa;border:1px solid var(--line);border-radius:13px;margin:16px 0}
+.repeat-settings>label:last-child{margin-bottom:0}
+.repeat-heading{display:flex;align-items:center;gap:7px}
+.repeat-interval{display:flex;align-items:center;gap:12px;margin-top:14px}
+.repeat-interval label{width:110px;margin-bottom:0}.repeat-interval>span{padding-top:14px;font-size:13px}
+.repeat-summary{font-size:12px;color:#8b4f65;border-top:1px solid var(--line);padding-top:12px;margin:12px 0 0}
+.repeat-settings .field-help,.series-scope .field-help{line-height:1.6;margin:8px 0 12px}
+.series-scope{border-color:#d9bc91}.series-scope label{margin-bottom:8px}
+.event-fields:disabled{opacity:.7}
+
+.calendar-header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.calendar-search-toggle{width:42px;height:42px;border:1px solid var(--line);border-radius:12px;background:#fff7fa;color:#8b4f65}
+.calendar-search{padding-top:12px}.calendar-search-form label{margin-bottom:12px}
+.search-period{display:flex;gap:5px;background:#faeaf1;padding:5px;border-radius:12px;margin-bottom:14px}
+.search-period button{flex:1;border:0;border-radius:9px;background:transparent;color:#806a74;min-height:38px;font-size:12px;padding:8px}
+.search-period button.selected{background:#fff;color:#8b4f65;box-shadow:0 1px 6px #523b4508}
+.calendar-search .field-help{line-height:1.6;margin:14px 0}
+.calendar-search-status{font-size:12px;color:var(--muted);margin:20px 0 14px}
+.calendar-search-results .event-card{width:100%}
+@media(max-width:600px){.calendar-header-actions{gap:6px}.calendar-page .native-calendar .list-toolbar h2{font-size:22px}.calendar-search-toggle{width:38px;height:38px}.calendar-search{padding-top:8px}}

@@ -1,7 +1,7 @@
 import {supabase} from './supabase';
 import {authenticatedCalendarRequest} from './calendarAuth';
-export type FamilyEvent={id:string;title:string;description:string;location:string;person:string;starts_at:string;ends_at:string;all_day:boolean;start_date:string|null;end_date:string|null;version?:number;etag?:string;source:'home'|'google';recurring?:boolean};
-export type EventDraft=Omit<FamilyEvent,'id'|'source'|'version'|'etag'|'recurring'>;
+export type FamilyEvent={id:string;title:string;description:string;location:string;person:string;starts_at:string;ends_at:string;all_day:boolean;start_date:string|null;end_date:string|null;version?:number;etag?:string;source:'home'|'google';recurring?:boolean;series_id?:string|null;recurrence?:string[]};
+export type EventDraft=Omit<FamilyEvent,'id'|'source'|'version'|'etag'|'recurring'|'series_id'>;
 export type CalendarConnection={configured:boolean;connected:boolean;calendarName?:string;setupRequired?:boolean;importIncomplete?:boolean};
 export function eventRequestId(){const a=crypto.getRandomValues(new Uint8Array(16));a[6]=(a[6]&15)|64;a[8]=(a[8]&63)|128;const h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 export const TIME_ZONE='America/Toronto';
@@ -33,10 +33,14 @@ export async function getEvents(hid:string,from:string,to:string,connected:boole
 }
 export async function saveEvent(hid:string,draft:EventDraft,current:FamilyEvent|null,connected:boolean,requestId:string){
  if(connected){return googleRequest(current?'update':'create',{householdId:hid,event:draft,id:current?.id,etag:current?.etag,requestId:requestId.replaceAll('-','')})}
- const r=current?await supabase.from('household_events').update({...draft,version:(current.version||1)+1}).eq('household_id',hid).eq('id',current.id).eq('version',current.version||1).select('id').maybeSingle():await supabase.from('household_events').insert({...draft,household_id:hid,id:requestId}).select('id').single();
+ if(draft.recurrence?.length)throw Error('Connect Google to save repeating events.');
+ const {recurrence,...nativeDraft}=draft;
+ const r=current?await supabase.from('household_events').update({...nativeDraft,version:(current.version||1)+1}).eq('household_id',hid).eq('id',current.id).eq('version',current.version||1).select('id').maybeSingle():await supabase.from('household_events').insert({...nativeDraft,household_id:hid,id:requestId}).select('id').single();
  if(r.error)throw r.error;if(!r.data)throw Error('This event changed on another device. Close this form and refresh before editing again.');
 }
 export async function deleteEvent(hid:string,event:FamilyEvent,connected:boolean){
  if(connected)return googleRequest('delete',{householdId:hid,id:event.id,etag:event.etag});
  const r=await supabase.from('household_events').delete().eq('household_id',hid).eq('id',event.id).eq('version',event.version||1).select('id').maybeSingle();if(r.error)throw r.error;if(!r.data)throw Error('This event changed on another device. Refresh before deleting it.');
 }
+
+export async function getEventSeries(hid:string,event:FamilyEvent):Promise<FamilyEvent>{const data=await googleRequest('series',{householdId:hid,id:event.id});return data.event}

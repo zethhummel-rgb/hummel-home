@@ -1,3 +1,5 @@
+import {searchParameters} from './search.ts';
+import {validateRecurrence} from './recurrence.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2.118.0';
 const APP='https://zethhummel-rgb.github.io/hummel-home/';
 const ORIGIN=new URL(APP).origin;
@@ -24,13 +26,14 @@ async function accessToken(connection:any){
  const d=await r.json();if(!r.ok||!d.access_token)throw Error('Google connection needs renewing. The household owner can reconnect Google.');return d.access_token as string;
 }
 function toGoogle(e:any){
+ if(!e||typeof e!=='object')throw Error('Check the event details.');
  if(typeof e.title!=='string'||!e.title.trim()||e.title.length>160||typeof e.description!=='string'||e.description.length>4000||typeof e.location!=='string'||e.location.length>300||typeof e.person!=='string'||!e.person||e.person.length>60)throw Error('Check the event name, notes, location, and person.');
  if(!e.starts_at||!e.ends_at||!Number.isFinite(Date.parse(e.starts_at))||!Number.isFinite(Date.parse(e.ends_at))||new Date(e.ends_at)<=new Date(e.starts_at))throw Error('The end time must be after the start time.');
  if(typeof e.all_day!=='boolean')throw Error('Invalid event type.');
  if(e.all_day&&(!/^\d{4}-\d{2}-\d{2}$/.test(e.start_date)||!/^\d{4}-\d{2}-\d{2}$/.test(e.end_date)||e.end_date<=e.start_date))throw Error('Check the all-day event dates.');
- return {summary:e.title.trim(),description:e.description,location:e.location,start:e.all_day?{date:e.start_date}:{dateTime:e.starts_at,timeZone:'America/Toronto'},end:e.all_day?{date:e.end_date}:{dateTime:e.ends_at,timeZone:'America/Toronto'},extendedProperties:{shared:{hummel_person:e.person}}};
+ return {summary:e.title.trim(),description:e.description,location:e.location,start:e.all_day?{date:e.start_date}:{dateTime:e.starts_at,timeZone:'America/Toronto'},end:e.all_day?{date:e.end_date}:{dateTime:e.ends_at,timeZone:'America/Toronto'},extendedProperties:{shared:{hummel_person:e.person}},...(e.recurrence!==undefined?{recurrence:validateRecurrence(e.recurrence,e.all_day?e.start_date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(e.starts_at)),e.all_day)}:{})};
 }
-function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e.summary||'(Untitled event)',description:e.description||'',location:e.location||'',person:e.extendedProperties?.shared?.hummel_person||'Everyone',starts_at:e.start?.dateTime||e.start?.date+'T00:00:00Z',ends_at:e.end?.dateTime||e.end?.date+'T00:00:00Z',all_day,start_date:e.start?.date||null,end_date:e.end?.date||null,etag:e.etag,source:'google',recurring:!!e.recurringEventId};}
+function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e.summary||'(Untitled event)',description:e.description||'',location:e.location||'',person:e.extendedProperties?.shared?.hummel_person||'Everyone',starts_at:e.start?.dateTime||e.start?.date+'T00:00:00Z',ends_at:e.end?.dateTime||e.end?.date+'T00:00:00Z',all_day,start_date:e.start?.date||null,end_date:e.end?.date||null,etag:e.etag,source:'google',recurring:!!(e.recurringEventId||e.recurrence?.length),series_id:e.recurringEventId||null,recurrence:e.recurrence||undefined};}
 const redirect=(ok:boolean,message='')=>{const u=new URL(APP);u.searchParams.set('calendar_connection',ok?'connected':'error');if(message)u.searchParams.set('calendar_message',message.slice(0,200));return Response.redirect(u,303)};
 Deno.serve(async(req:Request)=>{
  const url=new URL(req.url);
@@ -75,14 +78,26 @@ Deno.serve(async(req:Request)=>{
   }
   if(!ID||!SECRET||!connection?.migrationComplete)return json({error:'Google is not connected. Your Hummel Home calendar is still available.'},409);
   const access=await accessToken(connection),base='calendars/'+encodeURIComponent(connection.calendarId)+'/events';
+  if(b.action==='search'){
+   const {params,asOf}=searchParameters(b);const result=await google(access,base+'?'+params);
+   return json({events:(result.items||[]).filter((e:any)=>e.status!=='cancelled').map(fromGoogle),nextPageToken:result.nextPageToken||null,asOf});
+  }
   if(b.action==='events'){
    const from=Date.parse(b.from),to=Date.parse(b.to);if(!Number.isFinite(from)||!Number.isFinite(to)||to<=from||to-from>1000*60*60*24*120)return json({error:'Choose a calendar range up to 120 days'},400);
    const events=[];let pageToken='';do{const params=new URLSearchParams({timeMin:new Date(from).toISOString(),timeMax:new Date(to).toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'250',timeZone:'America/Toronto',...(pageToken?{pageToken}:{})});const d=await google(access,base+'?'+params);events.push(...(d.items||[]).filter((e:any)=>e.status!=='cancelled').map(fromGoogle));pageToken=d.nextPageToken||'';if(events.length>2000)throw Error('Too many events to display. Choose a smaller range.')}while(pageToken);return json({events});
+  }
+  if(b.action==='series'){
+   if(typeof b.id!=='string'||b.id.length>1200||!/^[a-zA-Z0-9_]+$/.test(b.id))return json({error:'Choose a valid event'},400);
+   const occurrence=await google(access,base+'/'+encodeURIComponent(b.id));const master=occurrence.recurringEventId?await google(access,base+'/'+encodeURIComponent(occurrence.recurringEventId)):occurrence;
+   if(!master.recurrence?.length)return json({error:'This event is no longer part of a repeating series. Refresh the calendar.'},409);
+   return json({event:fromGoogle(master)});
   }
   if(!['create','update','delete'].includes(b.action))return json({error:'Unknown calendar action'},400);
   if(b.action==='create'){if(typeof b.requestId!=='string'||!/^[a-f0-9]{32}$/.test(b.requestId))return json({error:'Invalid event request'},400);const event=await google(access,base,'POST',{...toGoogle(b.event),id:'home'+b.requestId});return json({event:fromGoogle(event)});}
   if(typeof b.id!=='string'||b.id.length>1200||!/^[a-zA-Z0-9_]+$/.test(b.id)||typeof b.etag!=='string'||b.etag.length>300)return json({error:'Refresh this event before changing it'},400);
   if(b.action==='delete'){await google(access,base+'/'+encodeURIComponent(b.id),'DELETE',undefined,b.etag);return json({ok:true});}
-  const current=await google(access,base+'/'+encodeURIComponent(b.id));const draft=toGoogle(b.event);const event=await google(access,base+'/'+encodeURIComponent(b.id),'PATCH',{...draft,extendedProperties:{...current.extendedProperties,shared:{...current.extendedProperties?.shared,hummel_person:b.event.person}}},b.etag);return json({event:fromGoogle(event)});
+  const current=await google(access,base+'/'+encodeURIComponent(b.id));
+  if(current.recurringEventId&&b.event?.recurrence!==undefined)return json({error:'Choose the whole series to change how this event repeats.'},400);
+  const draft=toGoogle(b.event);const event=await google(access,base+'/'+encodeURIComponent(b.id),'PATCH',{...draft,extendedProperties:{...current.extendedProperties,shared:{...current.extendedProperties?.shared,hummel_person:b.event.person}}},b.etag);return json({event:fromGoogle(event)});
  }catch(e){return json({error:e instanceof Error?e.message:'Calendar request failed'},400);}
 });

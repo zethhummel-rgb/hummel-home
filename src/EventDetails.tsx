@@ -32,7 +32,7 @@ export default function EventDetails({event,onClose,onEdit}:{event:FamilyEvent;o
     {event.location&&<div><MapPin aria-hidden="true"/><div><dt>Location</dt><dd>{event.location}</dd></div></div>}
    </dl>
    {event.description&&<div className="event-details-notes"><h3>Notes</h3><p>{event.description}</p></div>}
-   {event.recurring&&<p className="event-details-recurring">Part of a recurring event.</p>}
+   {event.recurring&&<p className="event-details-recurring">Part of a repeating event. Edit to change one occurrence or the whole series.</p>}
    <div className="event-details-actions"><button type="button" className="button soft" onClick={onClose}>Close</button><button type="button" className="text-button details-edit" onClick={()=>onEdit(event)}><Pencil size={15}/>Edit</button></div>
   </section>
  </div>;
