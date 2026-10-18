@@ -1,4 +1,5 @@
 import {supabase} from './supabase';
+import {authenticatedCalendarRequest} from './calendarAuth';
 export type FamilyEvent={id:string;title:string;description:string;location:string;person:string;starts_at:string;ends_at:string;all_day:boolean;start_date:string|null;end_date:string|null;version?:number;etag?:string;source:'home'|'google';recurring?:boolean};
 export type EventDraft=Omit<FamilyEvent,'id'|'source'|'version'|'etag'|'recurring'>;
 export type CalendarConnection={configured:boolean;connected:boolean;calendarName?:string;setupRequired?:boolean;importIncomplete?:boolean};
@@ -17,7 +18,7 @@ export function eventEndDate(e:FamilyEvent){return e.all_day?shiftDay(e.end_date
 export function timePart(value:string){return new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value))}
 export function eventTime(e:FamilyEvent){return e.all_day?'All day':new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'numeric',minute:'2-digit'}).format(new Date(e.starts_at))}
 export async function googleRequest(action:string,payload:Record<string,unknown>={}){
- const r=await supabase.functions.invoke('google-calendar',{body:{action,...payload}});
+ const r=await authenticatedCalendarRequest(supabase,{action,...payload});
  if(r.error){let message=r.error.message;try{const json=await r.error.context?.json();message=json?.error||message}catch{}throw Error(message)}
  if(r.data?.error)throw Error(r.data.error);return r.data;
 }
