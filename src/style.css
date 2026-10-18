@@ -268,3 +268,22 @@ input::placeholder,textarea::placeholder{color:var(--theme-subtle,#a48a96)}
 .palette-preview i+i{margin-left:-4px}
 .palette-copy{width:100%;padding-right:0}
 @media(max-width:600px){.palette-choice{min-height:70px}.palette-copy b{font-size:11px}.palette-copy small{display:none}}
+
+/* One list for simple to-dos and scheduled reminders, with an explicit Done folder. */
+.reminder-list-switch{display:flex;gap:5px;padding:4px;border:1px solid var(--line);background:var(--theme-tint,#faedf3);border-radius:12px;width:fit-content;margin:0 0 18px}
+.reminder-list-switch button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 16px;border-radius:9px;font-size:12px;color:var(--muted)}
+.reminder-list-switch button[aria-pressed=true]{background:var(--paper);color:var(--teal);box-shadow:0 1px 5px #00000008;font-weight:600}
+.reminder-list-switch button>span{font-size:10px;min-width:17px;text-align:center;opacity:.8}
+.done-folder-help{font-size:12px;margin:-3px 0 15px;line-height:1.6}
+.reminder-row{gap:12px;padding:13px 0;align-items:center}
+.reminder-row .item-copy{min-width:0}
+.reminder-row .reminder-title{font-size:13px;min-height:34px;line-height:1.5;padding:3px 0}
+.reminder-row.completed .reminder-title{text-decoration:line-through;color:var(--muted)}
+.reminder-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
+.reminder-meta small{margin:0;line-height:1.5}
+.reminder-actions{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.reminder-actions .reminder-edit{display:flex;align-items:center;gap:4px;padding:8px 5px;min-height:44px;font-size:11px;color:var(--teal);opacity:1;border-radius:7px}
+.reminder-actions .reminder-edit:hover{background:var(--theme-tint,#faedf3)}
+.reminder-actions .delete{opacity:1;min-height:44px;padding:7px 5px;color:var(--muted)}
+.reminder-done-mark{background:var(--teal);border-color:var(--teal);color:white}
+@media(max-width:600px){.todo-list .list-toolbar h2{font-size:22px;line-height:1.2}.todo-list .list-toolbar .button{padding:10px}.reminder-row{gap:9px}.reminder-actions{gap:1px}.reminder-list-switch{width:100%}.reminder-list-switch button{flex:1}.reminder-row .reminder-title{font-size:13px}.reminder-row .item-copy small{font-size:10px}}

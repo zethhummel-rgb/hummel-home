@@ -18,11 +18,11 @@ const subscription={endpoint:'https://web.push.apple.com/test',keys:{p256dh:'A'.
 for(const endpoint of['http://fcm.googleapis.com/x','https://127.0.0.1/x','https://fcm.googleapis.com.evil.test/x','https://user:password@fcm.googleapis.com/x','https://web.push.apple.com:444/x','https://metadata.google.internal/x'])assert.throws(()=>validSubscription({...subscription,endpoint}));
 const raw=fs.readFileSync(new URL('../supabase/functions/event-reminders/index.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
 const hid='11111111-1111-4111-8111-111111111111';
-function fixture({member=true,validToken=true,connected=false,removed=false,stale=false,cancelled=false,expired=false,task=false,completedTask=false,googleFailure=false,cronSecret='scheduler-only'}={}){
+function fixture({member=true,validToken=true,connected=false,removed=false,stale=false,cancelled=false,expired=false,task=false,completedTask=false,futureTask=false,googleFailure=false,cronSecret='scheduler-only'}={}){
  let handler,pushes=0,claimed=false,retired=false;const calls=[];
  const now=Date.now();const dueEvent={...event,starts_at:new Date(now+14*60000).toISOString()};
  const device={id:'device',household_id:hid,user_id:'zeth',subscription};
- const query=table=>{const q={select:()=>q,eq:()=>q,not:()=>q,gte:()=>q,lte:()=>q,limit:async()=>({data:table==='household_items'?(task&&!completedTask?[{id:'11111111-1111-4111-8111-111111111111',title:'Hockey',person:'Everyone',remind_at:new Date(now-60000).toISOString()}]:[]):task||cancelled?[]:[{...dueEvent,...(stale?{reminder_minutes:null}:{})}],error:null}),maybeSingle:async()=>({data:member?{user_id:'zeth'}:null,error:null}),single:async()=>({data:{owner_id:'zeth'},error:null}),then:resolve=>resolve({data:members,error:null})};return q};
+ const query=table=>{const q={select:()=>q,eq:()=>q,not:()=>q,gte:()=>q,lte:()=>q,limit:async()=>({data:table==='household_items'?(task&&!completedTask?[{id:'11111111-1111-4111-8111-111111111111',title:'Hockey',person:'Everyone',remind_at:new Date(now+(futureTask?86400000:-60000)).toISOString()}]:[]):task||cancelled?[]:[{...dueEvent,...(stale?{reminder_minutes:null}:{})}],error:null}),maybeSingle:async()=>({data:member?{user_id:'zeth'}:null,error:null}),single:async()=>({data:{owner_id:'zeth'},error:null}),then:resolve=>resolve({data:members,error:null})};return q};
  const admin={auth:{getUser:async()=>({data:{user:validToken?{id:'zeth'}:null},error:!validToken})},from:query,rpc:async(name,{action,payload})=>{
   calls.push(action);
   if(name==='calendar_service')return {data:connected?{migrationComplete:true,calendarId:'family',userId:'zeth',refreshToken:'never-to-client'}:null};
@@ -70,3 +70,21 @@ for(const connected of[false,true]){f=fixture({task:true,connected,googleFailure
 f=fixture({task:true,completedTask:true});await f.request({action:'dispatch'},{'x-hummel-cron':'scheduler-only'});assert.equal(f.pushes,0);
 handlers.push({data:{json:()=>({title:'Flea and tick reminder',taskId:'11111111-1111-4111-8111-111111111111',date:'2026-10-21'})},waitUntil:p=>work=p});await work;assert.equal(new URL(shown.data.url).searchParams.get('reminder_task'),'11111111-1111-4111-8111-111111111111');assert.equal(new URL(shown.data.url).searchParams.has('reminder_date'),false);
 console.log('Task reminder checks passed: independent delivery when Google is unavailable, completed reminders excluded, duplicate prevention, and reminder-list notification navigation.');
+
+// Completed repeats wait in Done, then return on the next Eastern calendar date.
+const {reminderWaiting,reminderIsDone}=await load('../src/taskReminders.ts');
+const monthly={id:'dogs',kind:'task',title:'Dogs',done:0,due:'2026-11-18',repeat_unit:'month',repeat_every:1,last_completed_at:'2026-10-18T20:31:00Z'};
+assert.equal(reminderWaiting(monthly,'2026-10-18'),true);
+assert.equal(reminderIsDone(monthly,'2026-11-17'),true);
+assert.equal(reminderIsDone(monthly,'2026-11-18'),false);
+assert.equal(reminderIsDone(monthly,'2026-11-19'),false);
+assert.equal(reminderIsDone({...monthly,last_completed_at:null},'2026-10-18'),false);
+assert.equal(reminderIsDone({...monthly,repeat_unit:'none',done:1},'2026-11-18'),true);
+assert.equal(reminderIsDone({...monthly,repeat_unit:'none',done:0,due:''},'2026-10-18'),false);
+assert.equal(reminderWaiting({...monthly,kind:'grocery'},'2026-10-18'),false);
+assert.equal(reminderIsDone({...monthly,due:'2027-01-01'},'2026-12-31'),true);
+assert.equal(reminderIsDone({...monthly,due:'2027-01-01'},'2027-01-01'),false);
+console.log('To-do checks passed: completed repeats wait in Done, exact-date reactivation, new scheduled tasks stay active, one-off completion and undated to-dos, year rollover, grocery isolation.');
+
+f=fixture({task:true,futureTask:true});await f.request({action:'dispatch'},{'x-hummel-cron':'scheduler-only'});assert.equal(f.pushes,0);
+console.log('Waiting repeats do not notify before their next scheduled time.');

@@ -34,9 +34,21 @@ do $$declare n integer;begin
  begin insert into public.household_items(household_id,kind,title,reminder_time) values(current_setting('test.reminder_home')::uuid,'task','No date','09:00');raise exception 'UNDATED_NOTIFICATION';exception when check_violation then null;end;
  begin insert into public.household_items(household_id,kind,title,due,repeat_unit,repeat_every) values(current_setting('test.reminder_home')::uuid,'task','Bad interval','2027-01-01','day',0);raise exception 'BAD_INTERVAL';exception when check_violation then null;end;
 end$$;
+-- A second completion with even the latest version must not skip a month.
 update public.household_items set done=true where id=current_setting('test.reminder_item')::uuid and reminder_version=2;
 do $$begin
- if not exists(select 1 from public.household_items where id=current_setting('test.reminder_item')::uuid and due='2027-03-31' and remind_at='2027-03-31T13:00:00Z') then raise exception 'DST or month anchor';end if;
+ if not exists(select 1 from public.household_items where id=current_setting('test.reminder_item')::uuid and due='2027-02-28' and not done and reminder_version=2 and remind_at='2027-02-28T14:00:00Z') then raise exception 'Double completion skipped next occurrence';end if;
+end$$;
+-- Waiting reminders remain editable, including their notification and next date.
+update public.household_items set title='Edited reminder',reminder_time='10:15' where id=current_setting('test.reminder_item')::uuid and reminder_version=2;
+do $$begin
+ if not exists(select 1 from public.household_items where id=current_setting('test.reminder_item')::uuid and title='Edited reminder' and reminder_time='10:15' and due='2027-02-28' and reminder_version=3) then raise exception 'Waiting reminder edit failed';end if;
+end$$;
+-- A reminder that has become due can be completed again.
+update public.household_items set due=(now() at time zone 'America/Toronto')::date where id=current_setting('test.reminder_item')::uuid;
+update public.household_items set done=true where id=current_setting('test.reminder_item')::uuid;
+do $$begin
+ if not exists(select 1 from public.household_items where id=current_setting('test.reminder_item')::uuid and due=private.advance_reminder((now() at time zone 'America/Toronto')::date,'month',1,(now() at time zone 'America/Toronto')::date) and not done and reminder_version=5) then raise exception 'Due repeat did not reactivate';end if;
 end$$;
 update public.household_items set due='2027-05-02' where id=current_setting('test.reminder_item')::uuid;
 do $$begin
@@ -50,4 +62,4 @@ do $$declare n integer;begin
  if has_table_privilege('anon','public.household_items','SELECT') then raise exception 'Anonymous reminder access';end if;
 end$$;
 rollback;
-select 'PASSED: recurring completion, stale-write protection, original month/leap anchors, overdue skips, Eastern DST, edit reset, notification constraints, grocery compatibility, version protection, household and anonymous isolation. Synthetic rows rolled back.' as result;
+select 'PASSED: recurring completion, same-day double completion guard, waiting edits, due-date reactivation, stale-write protection, original month/leap anchors, overdue skips, Eastern DST, edit reset, notification constraints, grocery compatibility, version protection, household and anonymous isolation. Synthetic rows rolled back.' as result;
