@@ -6,7 +6,7 @@ import {supabase} from './supabase';
 import Household from './Household';
 import type {Member} from './data';
 import './style.css';
-function Brand(){return <div className="auth-brand"><House size={30}/><span>Hummel Home</span></div>}
+function Brand(){return <div className="auth-brand"><img src="./icon.svg" alt=""/><span>Hummel Home</span></div>}
 function App(){
  const [session,setSession]=useState<Session|null>(null),[ready,setReady]=useState(false),[members,setMembers]=useState<Member[]>([]),[self,setSelf]=useState<Member|null>(null),[mode,setMode]=useState('login'),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[name,setName]=useState(''),[homeName,setHomeName]=useState('Hummel Home'),[invite,setInvite]=useState(()=>new URLSearchParams(location.search).get('invite')||sessionStorage.getItem('homeInvite')||'');
  useEffect(()=>{if(invite)sessionStorage.setItem('homeInvite',invite)},[invite]);
