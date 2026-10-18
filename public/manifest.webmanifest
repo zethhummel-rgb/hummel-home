@@ -1,0 +1,32 @@
+{
+  "id": "./",
+  "name": "Hummel Home",
+  "short_name": "Hummel Home",
+  "description": "Your family calendar, groceries, and household lists.",
+  "lang": "en-CA",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#286366",
+  "icons": [
+    {
+      "src": "./icons/hh-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/hh-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/hh-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
