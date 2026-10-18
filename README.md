@@ -33,7 +33,28 @@ Independent family website. React + Vite frontend on GitHub Pages, with a dedica
 
 ## Calendar
 
-Owner pastes the Google family calendar ID into settings. The website embeds Google's calendar; each visitor must be signed in to a Google account authorized for the private calendar. Browsers that block embedded sign-in can use Open in Google. Add event opens Google Calendar; choose the family calendar before saving. Events are not directly fetched into the home card, and no API/OAuth two-way synchronization is claimed.
+A native month view and agenda now live inside Hummel Home. Household members can create, edit, and delete shared events without leaving the site. Includes all-day and multi-day events, Eastern time, locations, notes, family assignments, upcoming home-screen events, and optimistic edit conflict detection.
+
+### Current Google status: NOT CONNECTED
+
+The secure OAuth and Calendar API backend is deployed, but Google Cloud OAuth credentials have not been configured. Native household events work independently. Google Cloud was unavailable in the authoring browser, so no Google project/client was created and live Google synchronization has not been tested. The site labels this clearly and does not claim synchronization.
+
+### One-time Google setup
+
+1. Create a separate **Hummel Home** Google Cloud project. Enable **Google Calendar API**.
+2. Configure an OAuth consent application and the scope `https://www.googleapis.com/auth/calendar.app.created`. This creates an app-owned secondary calendar; it does not read the account’s other calendars.
+3. Create a **Web application** OAuth client with this exact authorized redirect URI:
+   `https://ybizqfghnplcxlmlhvyn.supabase.co/functions/v1/google-calendar/callback`
+4. Store the client credentials in this Supabase project’s Edge Function Secrets as `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET`. Never paste the secret into chat, source, GitHub, or browser code.
+5. If the Google application is in Testing, add the owner’s Google account as a test user. Calendar refresh tokens in Testing can expire after seven days; production consent configuration is required for ongoing use and Google may impose verification requirements.
+6. In Hummel Home, the household owner chooses **Calendar → Connect Google Calendar** and approves the connection. This explicit action creates a dedicated family calendar in Google, imports existing native events, and authorizes household members to manage that one calendar through the website.
+7. Verify connect/return, event create/edit/delete, refresh, token renewal, and revoked-permission behavior with the actual Google account before relying on synchronization.
+
+Refresh tokens are encrypted in Supabase Vault. OAuth state is hashed, short-lived, and single-use, with PKCE. The server checks current household membership for every API action and only targets the server-selected family calendar. Calendar creation/import occurs only after the owner explicitly connects; event mutations occur only from event-editor submissions. Recurring Google events can be edited per occurrence; creating recurring series is not included yet.
+
+Once connected, Google is the event source for the household. Native event records remain preserved after import; native writes freeze while importing to avoid concurrent changes being missed. Reconnection skips previously imported events to avoid recreating deleted events. Native events can be used immediately while Google is not configured. A connected Google calendar is never silently replaced with native storage on errors.
+
+The backend uses `verify_jwt=false` because Google’s OAuth callback has no Supabase JWT. Authenticated POST operations explicitly validate the caller with `auth.getUser`, require current household membership, and validate Origin. The callback accepts only a valid single-use OAuth state and confirms the current owner. Anonymous POST operations are denied. No provider credentials are returned to browsers.
 
 ## Development
 
@@ -53,7 +74,12 @@ The app does not store groceries or tasks in localStorage. Supabase persists rec
 - Browser checked: login and account creation screens render and navigation works. No real credentials were entered.
 - Supabase security advisor returned zero findings after schema installation.
 - `database/security-check.sql` passed using synthetic users and records in a rolled-back transaction: owner/member data access, outsider isolation, email-bound invitations, invitation consumption, owner-only settings/invitations, and anonymous denial.
-- Live hosted signup, email delivery, password reset, and invitation end-to-end remain unverified pending publication and email configuration.
+- Native calendar editor browser checks passed using synthetic preview events: add, edit, delete, and all-day form behavior.
+- Calendar SQL checks passed in a rolled-back transaction: native event CRUD, stale-write protection, outsider/anonymous isolation, provider-secret isolation, one-use OAuth state, encrypted Vault round trip, and native-write freeze during Google import.
+- Hosted calendar endpoint rejects unauthenticated and cross-origin requests.
+- Eastern-time conversion, DST gap rejection, 25-hour all-day events, date rollover, and request-ID checks passed.
+- Google Cloud OAuth configuration and actual Google sync remain incomplete and unverified.
+- Supabase Site URL and allowed redirect URL were saved to the live GitHub Pages address. Live user signup/email flows still need user validation.
 
 ## Database changes
 
