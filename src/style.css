@@ -206,11 +206,14 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 .event-people{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px;white-space:normal}
 .people-dots,.tag-everyone-dots{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;flex-wrap:wrap}
 .people-dots i,.person-dot,.tag-everyone-dots i{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid #00000012;flex-shrink:0}
-.person-filter{position:relative;display:flex;align-items:center;gap:8px;margin:0 0 16px}
-.person-filter label{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted);margin:0}
-.person-filter select{width:auto;min-width:150px;max-width:230px;font-size:12px;padding:9px 28px 9px 10px;margin:0;min-height:40px}
-.filter-person-dot{height:9px;width:9px;border:1px solid #00000012;border-radius:50%}
-.today-card>.person-filter{margin:0 0 18px}.family-chip{gap:8px}
+.person-filter{position:relative;display:inline-flex;align-items:center;min-width:0;max-width:150px;color:#97818b}
+.person-filter select{appearance:none;-webkit-appearance:none;width:100%;min-width:0;max-width:150px;border:0;background:transparent;color:inherit;border-radius:6px;font-size:11px;font-weight:400;line-height:1.3;padding:10px 16px 10px 20px;margin:0;min-height:36px;text-overflow:ellipsis;cursor:pointer}
+.person-filter select:hover{background:#faeef4}.person-filter select:focus-visible{outline:2px solid #b8869d;outline-offset:1px}
+.person-filter-icon{position:absolute;left:3px;top:50%;transform:translateY(-50%);display:flex;pointer-events:none}
+.person-filter-icon i{width:6px;height:6px;border-radius:50%;border:1px solid #00000012}
+.person-filter-chevron{position:absolute;right:2px;top:50%;transform:translateY(-50%);pointer-events:none}
+.month-options{gap:8px}.month-options .person-filter{flex:1;margin:0}
+.today-card>.person-filter{display:flex;width:fit-content;margin:-7px 0 7px auto}.family-chip{gap:8px}
 .event-tag-picker{padding:14px;border:1px solid var(--line);border-radius:12px;margin:18px 0}
 .event-tag-picker legend{font-size:12px;color:var(--muted);padding:0 6px}
 .event-tag-picker label{display:flex;align-items:center;gap:9px;margin:0;padding:9px 0;font-size:13px}
@@ -224,4 +227,4 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 .custom-color{display:flex;align-items:center;gap:12px;font-size:12px;margin:18px 0}
 .custom-color input{width:50px;height:37px;padding:3px;border:1px solid var(--line)}
 .member-avatar{border:2px solid transparent}
-@media(max-width:600px){.person-filter label{flex:1;justify-content:space-between}.person-filter select{max-width:200px;min-width:130px}.people-dots i,.person-dot,.tag-everyone-dots i{width:9px;height:9px}.event-people{font-size:11px}.color-swatches{gap:9px}.color-swatches button{width:32px;height:32px}}
+@media(max-width:600px){.month-options .person-filter{max-width:125px}.person-filter select{font-size:10px;padding-left:18px;padding-right:14px}.person-filter-chevron{right:1px}.people-dots i,.person-dot,.tag-everyone-dots i{width:9px;height:9px}.event-people{font-size:11px}.color-swatches{gap:9px}.color-swatches button{width:32px;height:32px}}
