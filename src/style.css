@@ -174,16 +174,7 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 .details-edit{font-size:12px;min-height:44px;min-width:56px;justify-content:center;gap:6px;padding:8px 4px}
 @media(max-width:600px){.event-details h2{font-size:28px}.event-details-list dd{font-size:14px}.event-details .modal-close{width:40px;height:40px}}
 
-/* An obvious app refresh, including the latest site version. */
-.refresh-home{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:9px 12px;border:1px solid #e7cdd9;border-radius:11px;background:#faeaf1;color:#8b4f65;font-size:12px;white-space:nowrap}
-.refresh-home:hover{background:#f5dfe9}
+/* Full page refresh with a compact, accessible icon target. */
+.refresh-home{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;border-radius:12px;background:transparent;color:#8b4f65;flex-shrink:0}
+.refresh-home:hover{background:#faeaf1}
 .refresh-home svg{flex-shrink:0}
-@media(max-width:600px){
- .topbar{padding-left:14px;padding-right:14px;gap:10px}
- .mobile-brand{font-size:21px;gap:7px;min-width:0;white-space:nowrap}
- .mobile-monogram{width:31px;height:31px;border-radius:9px}
- .top-actions{gap:6px;flex-shrink:0}
- .refresh-home{font-size:11px;gap:5px;padding:8px 9px;min-height:40px}
- .top-actions>.avatar{width:32px;height:32px}
-}
-@media(max-width:360px){.mobile-brand{font-size:19px}.mobile-monogram{width:28px;height:28px}.refresh-home{font-size:10px;padding:8px 7px}.refresh-home svg{width:14px}}
