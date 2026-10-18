@@ -17,6 +17,10 @@ export function eventDate(e:FamilyEvent){return e.all_day?e.start_date!:dayKey(n
 export function eventEndDate(e:FamilyEvent){return e.all_day?shiftDay(e.end_date!,-1):dayKey(new Date(new Date(e.ends_at).getTime()-1))}
 export function timePart(value:string){return new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value))}
 export function eventTime(e:FamilyEvent){return e.all_day?'All day':new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,hour:'numeric',minute:'2-digit'}).format(new Date(e.starts_at))}
+export function eventDateLabel(e:FamilyEvent){
+ const format=(date:string)=>new Intl.DateTimeFormat('en-CA',{timeZone:'UTC',weekday:'short',month:'short',day:'numeric',year:'numeric'}).format(new Date(date+'T12:00:00Z'));
+ const start=eventDate(e),end=eventEndDate(e);return start===end?format(start):format(start)+' – '+format(end);
+}
 export async function googleRequest(action:string,payload:Record<string,unknown>={}){
  const r=await authenticatedCalendarRequest(supabase,{action,...payload});
  if(r.error){let message=r.error.message;try{const json=await r.error.context?.json();message=json?.error||message}catch{}throw Error(message)}

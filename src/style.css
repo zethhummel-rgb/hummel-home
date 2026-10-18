@@ -153,3 +153,5 @@ input::placeholder,textarea::placeholder{color:#a48a96}
   .calendar-page .native-calendar>.calendar-connection{margin-top:18px;padding:12px 3px 0}
   .calendar-page .native-calendar>.list-toolbar{margin-bottom:2px}
 }
+.home-events .event-time{line-height:1.5}
+.home-events .event-date{font-weight:600}
