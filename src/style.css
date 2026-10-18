@@ -237,3 +237,5 @@ input::placeholder,textarea::placeholder{color:#a48a96}
 
 .task-repeat{display:flex!important;align-items:center;gap:4px;color:#a48d98!important;font-size:10px!important}.reminder-edit{color:#a78897}.reminder-highlight{background:#fbf0f4;border-radius:12px;outline:1px solid #e5c9d5}.reminder-modal .repeat-settings{margin-bottom:20px}.reminder-modal .event-fields{margin-bottom:18px}
 @media(max-width:600px){.reminder-item{gap:8px}.reminder-item .tag{max-width:85px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.reminder-edit{padding:5px}}
+
+.reminder-title{display:block;font:inherit;color:inherit;text-align:left;line-height:1.5;padding:4px 0;min-height:28px;width:100%}.reminder-title:hover{color:var(--teal)}.reminder-edit{display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;opacity:1;color:#a27c8d}.reminder-item .item-copy{min-width:0}

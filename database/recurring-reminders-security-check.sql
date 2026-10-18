@@ -15,6 +15,12 @@ do $$begin
 end$$;
 set local role authenticated;
 select set_config('request.jwt.claim.sub',current_setting('test.reminder_owner'),true);
+-- Regression: upgrading a pre-existing undated task must work too.
+insert into public.household_items(household_id,kind,title) values(current_setting('test.reminder_home')::uuid,'task','Existing undated QA');
+update public.household_items set due='2026-10-20',reminder_time='09:00',repeat_unit='month',repeat_every=1 where household_id=current_setting('test.reminder_home')::uuid and title='Existing undated QA' and reminder_version=1;
+do $$begin
+ if not exists(select 1 from public.household_items where household_id=current_setting('test.reminder_home')::uuid and title='Existing undated QA' and repeat_unit='month' and repeat_anchor='2026-10-20' and remind_at='2026-10-20T13:00:00Z' and reminder_version=2) then raise exception 'Existing undated reminder upgrade';end if;
+end$$;
 insert into public.household_items(id,household_id,kind,title,due,reminder_time,repeat_unit,repeat_every) values(current_setting('test.reminder_item')::uuid,current_setting('test.reminder_home')::uuid,'task','Flea and tick QA','2027-01-31','09:00','month',1);
 do $$begin
  if not exists(select 1 from public.household_items where id=current_setting('test.reminder_item')::uuid and remind_at='2027-01-31T14:00:00Z' and reminder_version=1) then raise exception 'Eastern reminder storage';end if;

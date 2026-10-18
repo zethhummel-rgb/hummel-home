@@ -113,7 +113,7 @@ Verification: reminder timing/DST, recipients, Google metadata, native and Googl
 
 ## Household Reminders
 
-Lists is now Reminders. Existing tasks stay in place and remain silent unless a notification time is set. Add/edit a reminder with an optional due date, Eastern notification time, responsible person, and custom day/week/month/year interval. Notifications use the existing per-device opt-in and continue without a working Google connection. A notification opens Reminders and highlights the item.
+Lists is now Reminders. Existing tasks stay in place and remain silent unless a notification time is set. Tap a reminder title or its labelled Edit button to change it. Repeat and notification controls also work for undated existing items; enabling either fills today as a starting date that can be changed before saving. Add/edit a reminder with an optional due date, Eastern notification time, responsible person, and custom day/week/month/year interval. Notifications use the existing per-device opt-in and continue without a working Google connection. A notification opens Reminders and highlights the item.
 
 Repeating reminders keep one active occurrence. Completing it atomically advances to the next scheduled future date; a pending occurrence stays overdue until completed. The original schedule anchor preserves month-end dates and leap years, clamping to the last valid day in shorter months. Late completions skip missed dates. Changing the due date or repeat rule resets the anchor. Concurrent/stale saves and completion attempts are guarded by `reminder_version`. One-time reminders complete normally.
 
