@@ -28,7 +28,7 @@ export default function Household({email,name,householdId,members,owner,onSignOu
  function editEvent(event:FamilyEvent){setEventEditor({event,date:dayKey(new Date(event.starts_at))})}
  const [notificationEvent,setNotificationEvent]=useState(()=>new URLSearchParams(location.search).get('reminder_event'));
  useEffect(()=>{if(!notificationEvent||familyCalendar.loading||!familyCalendar.ready)return;const target=familyCalendar.events.find(e=>e.id===notificationEvent);if(target)setEventDetails(target);setNotificationEvent(null);const url=new URL(location.href);url.searchParams.delete('reminder_event');url.searchParams.delete('reminder_date');history.replaceState(null,'',url.href)},[notificationEvent,familyCalendar.events,familyCalendar.loading,familyCalendar.ready]);
- const upcomingEvents=familyCalendar.events.filter(e=>matchesPerson(e,personFilter,profiles)).filter(e=>e.all_day?eventEndDate(e)>=dayKey(new Date()):new Date(e.ends_at)>new Date()).sort((a,b)=>a.starts_at.localeCompare(b.starts_at)).slice(0,3);
+ const upcomingEvents=familyCalendar.events.filter(e=>matchesPerson(e,personFilter,profiles)).filter(e=>e.all_day?eventEndDate(e)>=dayKey(new Date()):new Date(e.ends_at)>new Date()).sort((a,b)=>a.starts_at.localeCompare(b.starts_at)).slice(0,5);
  const people=Array.from(new Set(['Everyone',...profiles.map(p=>p.name)]));
  const initials=name==='Zeth'?'ZH':name==='Chelsea'?'CH':name.slice(0,2).toUpperCase();
  const [reloading,setReloading]=useState(false);
