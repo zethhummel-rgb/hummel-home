@@ -1,8 +1,10 @@
+import PeopleDots from './PeopleDots';
+import type {PersonProfile} from './people';
 import {useEffect,useRef} from 'react';
 import {CalendarDays,Clock,MapPin,Users,Pencil,X} from 'lucide-react';
 import {eventDateLabel,eventTime,TIME_ZONE,type FamilyEvent} from './calendarData';
 
-export default function EventDetails({event,onClose,onEdit}:{event:FamilyEvent;onClose:()=>void;onEdit:(event:FamilyEvent)=>void}){
+export default function EventDetails({event,onClose,onEdit,profiles}:{profiles:PersonProfile[];event:FamilyEvent;onClose:()=>void;onEdit:(event:FamilyEvent)=>void}){
  const modal=useRef<HTMLElement>(null),close=useRef(onClose);close.current=onClose;
  useEffect(()=>{
   const previous=document.activeElement as HTMLElement;
@@ -28,7 +30,7 @@ export default function EventDetails({event,onClose,onEdit}:{event:FamilyEvent;o
    <dl className="event-details-list">
     <div><CalendarDays aria-hidden="true"/><div><dt>Date</dt><dd>{eventDateLabel(event)}</dd></div></div>
     <div><Clock aria-hidden="true"/><div><dt>Time</dt><dd>{event.all_day?'All day':eventTime(event)+' – '+endTime}</dd>{!event.all_day&&<small>Eastern time</small>}</div></div>
-    <div><Users aria-hidden="true"/><div><dt>For</dt><dd>{event.person}</dd></div></div>
+    <div><Users aria-hidden="true"/><div><dt>For</dt><dd><PeopleDots event={event} profiles={profiles}/></dd></div></div>
     {event.location&&<div><MapPin aria-hidden="true"/><div><dt>Location</dt><dd>{event.location}</dd></div></div>}
    </dl>
    {event.description&&<div className="event-details-notes"><h3>Notes</h3><p>{event.description}</p></div>}

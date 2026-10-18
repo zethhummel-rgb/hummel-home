@@ -1,0 +1,13 @@
+import fs from 'node:fs';import ts from 'typescript';import assert from 'node:assert/strict';
+const load=async path=>{const source=fs.readFileSync(new URL(path,import.meta.url),'utf8');const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;return import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'))};
+const {familyProfiles,eventPeople,matchesPerson,selectedPeople,safeColor}=await load('../src/people.ts');
+const members=[{user_id:'11111111-1111-4111-8111-111111111111',display_name:'Zeth Hummel',calendar_color:'#467EB6'},{user_id:'22222222-2222-4222-8222-222222222222',display_name:'Chelsea',calendar_color:'#C46B8C'}];
+const profiles=familyProfiles(members);assert.equal(profiles.length,3);assert.equal(profiles[2].name,'Holt');assert.equal(profiles[2].color,'#E78725');
+let e={person:'Everyone'};assert.equal(eventPeople(e,profiles).length,3);for(const p of profiles)assert.equal(matchesPerson(e,p.id,profiles),true);
+e={person:'Everyone',person_ids:[members[0].user_id,'child:holt']};assert.deepEqual(eventPeople(e,profiles).map(p=>p.name),['Zeth Hummel','Holt']);assert.equal(matchesPerson(e,members[1].user_id,profiles),false);assert.equal(matchesPerson(e,'child:holt',profiles),true);
+assert.equal(eventPeople({person:'Zeth'},profiles)[0].id,members[0].user_id);assert.equal(matchesPerson({person:'Holt'},'child:holt',profiles),true);
+assert.deepEqual(selectedPeople({person:'Everyone',person_ids:[]},profiles),[]);
+const future=familyProfiles([...members,{user_id:'33333333-3333-4333-8333-333333333333',display_name:'Holt Hummel',calendar_color:'#328C94'}]);assert.equal(future.length,3);assert.equal(future[2].color,'#328C94');assert.equal(eventPeople(e,future)[1].id,future[2].id);assert.equal(matchesPerson(e,future[2].id,future),true);
+assert.equal(safeColor('red;display:none'),null);assert.equal(safeColor('#FFFFFF'),'#FFFFFF');assert.equal(familyProfiles([{...members[0],calendar_color:'url(malicious)'}])[0].color,'#467EB6');
+const {encodePersonIds,decodePersonIds}=await load('../supabase/functions/google-calendar/tags.ts');assert.deepEqual(decodePersonIds(encodePersonIds([members[0].user_id,'child:holt'])),[members[0].user_id,'child:holt']);assert.deepEqual(decodePersonIds('[]'),[]);assert.equal(decodePersonIds('broken'),undefined);assert.equal(decodePersonIds('["unknown"]'),undefined);assert.throws(()=>encodePersonIds(Array(21).fill('child:holt')));assert.deepEqual(decodePersonIds(encodePersonIds(['child:holt','child:holt'])),['child:holt']);
+console.log('People checks passed: chosen colours, orange Holt default, multi-person dots, Everyone filters, legacy names, future Holt account aliases, CSS validation, and bounded Google tags.');

@@ -1,3 +1,4 @@
+import {encodePersonIds,decodePersonIds} from './tags.ts';
 import {searchParameters} from './search.ts';
 import {validateRecurrence} from './recurrence.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2.118.0';
@@ -31,9 +32,9 @@ function toGoogle(e:any){
  if(!e.starts_at||!e.ends_at||!Number.isFinite(Date.parse(e.starts_at))||!Number.isFinite(Date.parse(e.ends_at))||new Date(e.ends_at)<=new Date(e.starts_at))throw Error('The end time must be after the start time.');
  if(typeof e.all_day!=='boolean')throw Error('Invalid event type.');
  if(e.all_day&&(!/^\d{4}-\d{2}-\d{2}$/.test(e.start_date)||!/^\d{4}-\d{2}-\d{2}$/.test(e.end_date)||e.end_date<=e.start_date))throw Error('Check the all-day event dates.');
- return {summary:e.title.trim(),description:e.description,location:e.location,start:e.all_day?{date:e.start_date}:{dateTime:e.starts_at,timeZone:'America/Toronto'},end:e.all_day?{date:e.end_date}:{dateTime:e.ends_at,timeZone:'America/Toronto'},extendedProperties:{shared:{hummel_person:e.person}},...(e.recurrence!==undefined?{recurrence:validateRecurrence(e.recurrence,e.all_day?e.start_date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(e.starts_at)),e.all_day)}:{})};
+ return {summary:e.title.trim(),description:e.description,location:e.location,start:e.all_day?{date:e.start_date}:{dateTime:e.starts_at,timeZone:'America/Toronto'},end:e.all_day?{date:e.end_date}:{dateTime:e.ends_at,timeZone:'America/Toronto'},extendedProperties:{shared:{hummel_person:e.person,...(e.person_ids!=null?{hummel_people:encodePersonIds(e.person_ids)}:{})}},...(e.recurrence!==undefined?{recurrence:validateRecurrence(e.recurrence,e.all_day?e.start_date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(e.starts_at)),e.all_day)}:{})};
 }
-function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e.summary||'(Untitled event)',description:e.description||'',location:e.location||'',person:e.extendedProperties?.shared?.hummel_person||'Everyone',starts_at:e.start?.dateTime||e.start?.date+'T00:00:00Z',ends_at:e.end?.dateTime||e.end?.date+'T00:00:00Z',all_day,start_date:e.start?.date||null,end_date:e.end?.date||null,etag:e.etag,source:'google',recurring:!!(e.recurringEventId||e.recurrence?.length),series_id:e.recurringEventId||null,recurrence:e.recurrence||undefined};}
+function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e.summary||'(Untitled event)',description:e.description||'',location:e.location||'',person:e.extendedProperties?.shared?.hummel_person||'Everyone',person_ids:decodePersonIds(e.extendedProperties?.shared?.hummel_people),starts_at:e.start?.dateTime||e.start?.date+'T00:00:00Z',ends_at:e.end?.dateTime||e.end?.date+'T00:00:00Z',all_day,start_date:e.start?.date||null,end_date:e.end?.date||null,etag:e.etag,source:'google',recurring:!!(e.recurringEventId||e.recurrence?.length),series_id:e.recurringEventId||null,recurrence:e.recurrence||undefined};}
 const redirect=(ok:boolean,message='')=>{const u=new URL(APP);u.searchParams.set('calendar_connection',ok?'connected':'error');if(message)u.searchParams.set('calendar_message',message.slice(0,200));return Response.redirect(u,303)};
 Deno.serve(async(req:Request)=>{
  const url=new URL(req.url);
@@ -98,6 +99,6 @@ Deno.serve(async(req:Request)=>{
   if(b.action==='delete'){await google(access,base+'/'+encodeURIComponent(b.id),'DELETE',undefined,b.etag);return json({ok:true});}
   const current=await google(access,base+'/'+encodeURIComponent(b.id));
   if(current.recurringEventId&&b.event?.recurrence!==undefined)return json({error:'Choose the whole series to change how this event repeats.'},400);
-  const draft=toGoogle(b.event);const event=await google(access,base+'/'+encodeURIComponent(b.id),'PATCH',{...draft,extendedProperties:{...current.extendedProperties,shared:{...current.extendedProperties?.shared,hummel_person:b.event.person}}},b.etag);return json({event:fromGoogle(event)});
+  const draft=toGoogle(b.event);const event=await google(access,base+'/'+encodeURIComponent(b.id),'PATCH',{...draft,extendedProperties:{...current.extendedProperties,shared:{...current.extendedProperties?.shared,...draft.extendedProperties.shared,...(b.event.person_ids===undefined&&current.extendedProperties?.shared?.hummel_person!==b.event.person?{hummel_people:''}:{})}}},b.etag);return json({event:fromGoogle(event)});
  }catch(e){return json({error:e instanceof Error?e.message:'Calendar request failed'},400);}
 });

@@ -1,6 +1,6 @@
 import {supabase} from './supabase';
 import {authenticatedCalendarRequest} from './calendarAuth';
-export type FamilyEvent={id:string;title:string;description:string;location:string;person:string;starts_at:string;ends_at:string;all_day:boolean;start_date:string|null;end_date:string|null;version?:number;etag?:string;source:'home'|'google';recurring?:boolean;series_id?:string|null;recurrence?:string[]};
+export type FamilyEvent={id:string;title:string;description:string;location:string;person:string;person_ids?:string[]|null;starts_at:string;ends_at:string;all_day:boolean;start_date:string|null;end_date:string|null;version?:number;etag?:string;source:'home'|'google';recurring?:boolean;series_id?:string|null;recurrence?:string[]};
 export type EventDraft=Omit<FamilyEvent,'id'|'source'|'version'|'etag'|'recurring'|'series_id'>;
 export type CalendarConnection={configured:boolean;connected:boolean;calendarName?:string;setupRequired?:boolean;importIncomplete?:boolean};
 export function eventRequestId(){const a=crypto.getRandomValues(new Uint8Array(16));a[6]=(a[6]&15)|64;a[8]=(a[8]&63)|128;const h=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}

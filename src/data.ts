@@ -1,9 +1,9 @@
 import {supabase} from './supabase';
-export type Member={user_id:string;display_name:string;role:string;household_id:string};
+export type Member={user_id:string;display_name:string;role:string;household_id:string;calendar_color?:string|null};
 export async function loadHousehold(id:string){
- const [items,home]=await Promise.all([supabase.from('household_items').select('*').eq('household_id',id).order('created_at'),supabase.from('households').select('calendar_id').eq('id',id).single()]);
- if(items.error)throw items.error;if(home.error)throw home.error;
- return {items:items.data.map(x=>({...x,due:x.due||'',done:x.done?1:0,createdAt:x.created_at})),calendarId:home.data.calendar_id};
+ const [items,home,members]=await Promise.all([supabase.from('household_items').select('*').eq('household_id',id).order('created_at'),supabase.from('households').select('calendar_id').eq('id',id).single(),supabase.from('household_members').select('*').eq('household_id',id).order('joined_at')]);
+ if(items.error)throw items.error;if(home.error)throw home.error;if(members.error)throw members.error;
+ return {items:items.data.map(x=>({...x,due:x.due||'',done:x.done?1:0,createdAt:x.created_at})),calendarId:home.data.calendar_id,members:members.data as Member[]};
 }
 type Change={action:string;id?:string;value?:string;kind?:string;title?:string;category?:string;person?:string;due?:string;done?:boolean};
 export async function changeHousehold(id:string,body:unknown){

@@ -22,6 +22,8 @@ assert.throws(()=>validateRecurrence(['RDATE:20261018'],'2026-10-18',true));
 assert.deepEqual(validateRecurrence([],'2026-10-18',false),[]);
 const searchSource=fs.readFileSync(new URL('../supabase/functions/google-calendar/search.ts',import.meta.url),'utf8');
 const {searchParameters}=await import('data:text/javascript;base64,'+Buffer.from(compile(searchSource)).toString('base64'));
+const tagsSource=fs.readFileSync(new URL('../supabase/functions/google-calendar/tags.ts',import.meta.url),'utf8');
+const {encodePersonIds,decodePersonIds}=await import('data:text/javascript;base64,'+Buffer.from(compile(tagsSource)).toString('base64'));
 const raw=fs.readFileSync(new URL('../supabase/functions/google-calendar/index.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
 const code=compile(raw);
 const hid='11111111-1111-4111-8111-111111111111',origin='https://zethhummel-rgb.github.io';
@@ -43,7 +45,7 @@ function fixture({member=true,validToken=true}={}){
   if(method==='PATCH'){events.set(id,{...current,...JSON.parse(init.body),etag:'"v2"'});return Response.json(events.get(id))}
   return Response.json(current);
  };
- vm.runInNewContext(code,{validateRecurrence,searchParameters,createClient:()=>admin,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',GOOGLE_CALENDAR_CLIENT_ID:'client',GOOGLE_CALENDAR_CLIENT_SECRET:'server-secret',SUPABASE_SERVICE_ROLE_KEY:'server-key'})[k]},serve:fn=>{handler=fn}},fetch:fakeFetch,Response,Request,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,btoa});
+ vm.runInNewContext(code,{encodePersonIds,decodePersonIds,validateRecurrence,searchParameters,createClient:()=>admin,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',GOOGLE_CALENDAR_CLIENT_ID:'client',GOOGLE_CALENDAR_CLIENT_SECRET:'server-secret',SUPABASE_SERVICE_ROLE_KEY:'server-key'})[k]},serve:fn=>{handler=fn}},fetch:fakeFetch,Response,Request,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,btoa});
  return{calls,events,request:async(body,headers={})=>{const r=await handler(new Request('https://test.supabase.co/functions/v1/google-calendar',{method:'POST',headers:{origin,authorization:'Bearer session','content-type':'application/json',...headers},body:JSON.stringify({householdId:hid,...body})}));return{status:r.status,body:await r.json()}}};
 }
 const draft={title:'Birthday',description:'Notes',location:'Home',person:'Chelsea',starts_at:'2027-02-06T05:00:00Z',ends_at:'2027-02-07T05:00:00Z',all_day:true,start_date:'2027-02-06',end_date:'2027-02-07'};
@@ -63,5 +65,7 @@ f=fixture();r=await f.request({action:'series',id:'../other-calendar'});assert.e
 for(const period of['all','upcoming','past']){f=fixture();r=await f.request({action:'search',query:' hockey & birthday ',period,asOf:'2026-10-18T11:00:00Z'});assert.equal(r.status,200);const u=new URL(f.calls[0].url);assert.equal(u.searchParams.get('q'),'hockey & birthday');assert.equal(u.searchParams.get('maxResults'),'50');assert.equal(u.searchParams.get('timeMin'),period==='upcoming'?'2026-10-18T11:00:00.000Z':null);assert.equal(u.searchParams.get('timeMax'),period==='past'?'2026-10-18T11:00:00.000Z':null);assert.equal(r.body.nextPageToken,'next-results');assert.equal(r.body.events[0].series_id,master.id);r=await f.request({action:'search',query:'hockey & birthday',period,asOf:r.body.asOf,pageToken:r.body.nextPageToken});assert.equal(r.status,200);assert.equal(new URL(f.calls.at(-1).url).searchParams.get('pageToken'),'next-results');assert.equal(r.body.nextPageToken,null)}
 for(const change of[{query:''},{query:'x'.repeat(151)},{period:'invalid'},{pageToken:'x'.repeat(4097)},{asOf:'invalid'}]){f=fixture();r=await f.request({action:'search',query:'Hockey',period:'all',...change});assert.equal(r.status,400);assert.equal(f.calls.length,0)}
 f=fixture({member:false});r=await f.request({action:'search',query:'Birthday',period:'all'});assert.equal(r.status,403);assert.equal(f.calls.length,0);
+f=fixture();r=await f.request({action:'update',id:master.id,etag:master.etag,event:{...draft,person:'Chelsea, Holt',person_ids:['22222222-2222-4222-8222-222222222222','child:holt']}});assert.equal(r.status,200);assert.deepEqual(r.body.event.person_ids,['22222222-2222-4222-8222-222222222222','child:holt']);assert.equal(f.events.get(master.id).extendedProperties.shared.keep,'shared');
+f=fixture();f.events.get(master.id).extendedProperties.shared.hummel_people='["child:holt"]';r=await f.request({action:'update',id:master.id,etag:master.etag,event:{...draft,person:'Everyone'}});assert.equal(r.status,200);assert.equal(r.body.event.person_ids,undefined);
 console.log('Search checks passed: all dates, past/future filters, query encoding, recurrence instances, pagination, input validation, and household access.');
 console.log('Repeat checks passed: custom intervals, yearly birthdays, finite endings, DST cutoffs, Google series/occurrence separation, etag conflicts, metadata preservation, and household authorization.');

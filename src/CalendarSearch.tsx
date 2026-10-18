@@ -1,3 +1,4 @@
+import type {PersonProfile} from './people';
 import {useEffect,useRef,useState} from 'react';
 import {Search} from 'lucide-react';
 import {EventCard} from './Calendar';
@@ -5,7 +6,7 @@ import EventDetails from './EventDetails';
 import {type FamilyEvent} from './calendarData';
 import {type SearchPage,type SearchPeriod} from './calendarSearchData';
 export type SearchEvents=(query:string,period:SearchPeriod,pageToken?:string,asOf?:string)=>Promise<SearchPage>;
-export default function CalendarSearch({onSearch,onEdit}:{onSearch:SearchEvents;onEdit:(event:FamilyEvent)=>void}){
+export default function CalendarSearch({onSearch,onEdit,profiles}:{profiles:PersonProfile[];onSearch:SearchEvents;onEdit:(event:FamilyEvent)=>void}){
  const [query,setQuery]=useState(''),[period,setPeriod]=useState<SearchPeriod>('all'),[events,setEvents]=useState<FamilyEvent[]>([]),[page,setPage]=useState<SearchPage|null>(null),[loading,setLoading]=useState(false),[searched,setSearched]=useState(false),[error,setError]=useState(''),[details,setDetails]=useState<FamilyEvent|null>(null);
  const generation=useRef(0),input=useRef<HTMLInputElement>(null);
  useEffect(()=>{input.current?.focus();return()=>{generation.current++}},[]);
@@ -23,8 +24,8 @@ export default function CalendarSearch({onSearch,onEdit}:{onSearch:SearchEvents;
   <p className="field-help">Search names, notes, and locations across your family calendar. Results are in date order, oldest first.</p>
   {error&&<div className="error" role="alert">{error}<button onClick={()=>search()}>Try again</button></div>}
   <div aria-live="polite" className="calendar-search-status">{loading?'Searching your calendar…':searched?events.length?`${events.length}${page?.nextPageToken?'+':''} matching event${events.length===1?'':'s'}`:'No matching events. Try another word or date option.':'Choose a word and search past, future, or all dates.'}</div>
-  <div className="calendar-search-results">{events.map(event=><EventCard key={event.id} event={event} onEdit={setDetails} showDate/>)}</div>
+  <div className="calendar-search-results">{events.map(event=><EventCard key={event.id} event={event} profiles={profiles} onEdit={setDetails} showDate/>)}</div>
   {page?.nextPageToken&&<button className="button soft wide" disabled={loading} onClick={()=>search(true)}>{loading?'Loading…':'Show more results'}</button>}
-  {details&&<EventDetails event={details} onClose={()=>setDetails(null)} onEdit={event=>{setDetails(null);onEdit(event)}}/>}
+  {details&&<EventDetails profiles={profiles} event={details} onClose={()=>setDetails(null)} onEdit={event=>{setDetails(null);onEdit(event)}}/>}
  </section>;
 }

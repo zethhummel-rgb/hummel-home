@@ -21,6 +21,8 @@ Independent family website. React + Vite frontend on GitHub Pages, with a dedica
 6. Confirm Email should remain enabled. Use strong project password settings (the app requires at least 12 characters for new/reset passwords).
 7. Verify signup, email confirmation, recovery, and invitation acceptance using real email inboxes before relying on the site.
 
+Newer pushes supersede older queued deployments in the `pages` concurrency group, so an obsolete run cannot hold up the latest site version.
+
 ## Family accounts
 
 - First user signs up, confirms their email, signs in, and creates the household.
@@ -29,7 +31,9 @@ Independent family website. React + Vite frontend on GitHub Pages, with a dedica
 - Invitee signs up using that exact email, confirms it, then joins through the link.
 - Invitations expire after 7 days, work once, and can be revoked before use.
 - Members share groceries and tasks; only the owner manages calendar settings and invitations.
-- Holt can be represented in task assignments before having an account. An account can be invited later.
+- Holt can be represented before having an account, with orange as his default calendar colour. An account can be invited later; existing Holt tags resolve to that account.
+- Avatar → Your calendar colour lets each account choose a palette or custom colour. Only that account can update its colour; current household members can read it. Colour choices refresh across devices with household data.
+- Events can tag multiple people. Tagged people appear as coloured dots in home events, agenda cards, details, and search results. Everyone resolves to the current family, including Holt. Person filters on Home and Calendar include Everyone events for each person. Event tags are display metadata and never grant account or calendar access.
 
 ## Calendar
 
@@ -74,6 +78,8 @@ The app does not store groceries or tasks in localStorage. Supabase persists rec
 ## Verification completed
 
 - TypeScript and production build passed.
+- Member-colour SQL checks passed in a rolled-back synthetic transaction: own-colour updates, family reads, denial of changes to other members, role/name update denial, invalid CSS rejection, multi-person tags, and outsider/anonymous isolation.
+- People checks cover chosen colours, the orange Holt default, multi-person and Everyone filters, legacy names, and continuity when Holt creates an account.
 - Browser checked: login and account creation screens render and navigation works. No real credentials were entered.
 - Supabase security advisor returned zero findings after schema installation.
 - `database/security-check.sql` passed using synthetic users and records in a rolled-back transaction: owner/member data access, outsider isolation, email-bound invitations, invitation consumption, owner-only settings/invitations, and anonymous denial.
@@ -86,5 +92,7 @@ The app does not store groceries or tasks in localStorage. Supabase persists rec
 - Supabase Site URL and allowed redirect URL were saved to the live GitHub Pages address. Live user signup/email flows still need user validation.
 
 ## Database changes
+
+`supabase/migrations/20261018112908_member_colours_and_event_people.sql` adds account colours and native event person IDs without changing existing records.
 
 `supabase/migrations/20261018010629_household_accounts.sql` records the exact applied migration. Do not rerun it on the existing project. For a fresh separate project, apply the schema once through the Supabase migration tools. No auth users or household records are seeded.
