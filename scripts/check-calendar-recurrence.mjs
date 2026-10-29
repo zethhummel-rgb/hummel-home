@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import ts from 'typescript';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+const transitionSource=fs.readFileSync(new URL('../supabase/functions/google-calendar/transition.ts',import.meta.url),'utf8');
+const transitionModule=await import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(transitionSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
+const transitionToken='c'.repeat(64),transitionHash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(transitionToken))).toString('hex');
 const compile=source=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
 const recurrenceSource=fs.readFileSync(new URL('../supabase/functions/google-calendar/recurrence.ts',import.meta.url),'utf8');
 const recurrence=await import('data:text/javascript;base64,'+Buffer.from(compile(recurrenceSource)).toString('base64'));
@@ -30,9 +33,9 @@ const code=compile(raw);
 const hid='11111111-1111-4111-8111-111111111111',origin='https://zethhummel-rgb.github.io';
 const master={id:'series1',summary:'Birthday',description:'Keep these notes',location:'Home',start:{date:'2027-02-06'},end:{date:'2027-02-07'},recurrence:['RRULE:FREQ=YEARLY'],etag:'"v1"',extendedProperties:{private:{keep:'private'},shared:{hummel_person:'Chelsea',keep:'shared'}}};
 const instance={...master,id:'series1_20280206',start:{date:'2028-02-06'},end:{date:'2028-02-07'},recurringEventId:'series1',recurrence:undefined,etag:'"i1"'};
-function fixture({member=true,validToken=true}={}){
+function fixture({member=true,validToken=true,transition=false}={}){
  let handler;const calls=[],events=new Map([[master.id,structuredClone(master)],[instance.id,structuredClone(instance)]]);
- const admin={auth:{getUser:async token=>({error:!validToken||token!=='session',data:{user:validToken&&token==='session'?{id:'family-member'}:null}})},from:()=>{const filters={};const q={select:()=>q,eq:(k,v)=>{filters[k]=v;return q},maybeSingle:async()=>({data:member&&filters.household_id===hid&&filters.user_id==='family-member'?{role:'member'}:null,error:null})};return q},rpc:async(action,payload)=>({data:{calendarId:'family@example.com',refreshToken:'server-only',migrationComplete:true},error:null})};
+ const admin={auth:{getUser:async token=>({error:!validToken||token!=='session',data:{user:validToken&&token==='session'?{id:'family-member'}:null}})},from:()=>{const filters={};const q={select:()=>q,eq:(k,v)=>{filters[k]=v;return q},maybeSingle:async()=>({data:member&&filters.household_id===hid&&filters.user_id==='family-member'?{role:'member'}:null,error:null})};return q},rpc:async(name,{payload})=>({data:name==='household_transition_service'?(transition&&payload.householdId===hid&&payload.tokenHash===transitionHash?{ownerId:'family-member'}:null):{calendarId:'family@example.com',refreshToken:'server-only',migrationComplete:true},error:null})};
  const fakeFetch=async(url,init={})=>{
   if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'google-access'});
   calls.push({url,method:init.method||'GET',headers:init.headers,body:init.body?JSON.parse(init.body):undefined});
@@ -46,7 +49,7 @@ function fixture({member=true,validToken=true}={}){
   if(method==='PATCH'){events.set(id,{...current,...JSON.parse(init.body),etag:'"v2"'});return Response.json(events.get(id))}
   return Response.json(current);
  };
- vm.runInNewContext(code,{reminderMinutes,readReminder,encodePersonIds,decodePersonIds,validateRecurrence,searchParameters,createClient:()=>admin,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',GOOGLE_CALENDAR_CLIENT_ID:'client',GOOGLE_CALENDAR_CLIENT_SECRET:'server-secret',SUPABASE_SERVICE_ROLE_KEY:'server-key'})[k]},serve:fn=>{handler=fn}},fetch:fakeFetch,Response,Request,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,btoa});
+ vm.runInNewContext(code,{reminderMinutes,readReminder,encodePersonIds,decodePersonIds,validateRecurrence,searchParameters,...transitionModule,createClient:()=>admin,Deno:{env:{get:k=>({SUPABASE_URL:'https://test.supabase.co',GOOGLE_CALENDAR_CLIENT_ID:'client',GOOGLE_CALENDAR_CLIENT_SECRET:'server-secret',SUPABASE_SERVICE_ROLE_KEY:'server-key'})[k]},serve:fn=>{handler=fn}},fetch:(url,init)=>fakeFetch(typeof url==='string'?url:url.toString(),init),Response,Request,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,btoa});
  return{calls,events,request:async(body,headers={})=>{const r=await handler(new Request('https://test.supabase.co/functions/v1/google-calendar',{method:'POST',headers:{origin,authorization:'Bearer session','content-type':'application/json',...headers},body:JSON.stringify({householdId:hid,...body})}));return{status:r.status,body:await r.json()}}};
 }
 const draft={title:'Birthday',description:'Notes',location:'Home',person:'Chelsea',starts_at:'2027-02-06T05:00:00Z',ends_at:'2027-02-07T05:00:00Z',all_day:true,start_date:'2027-02-06',end_date:'2027-02-07'};
@@ -81,3 +84,9 @@ f=fixture();r=await f.request({action:'update',id:instance.id,etag:instance.etag
 r=await f.request({action:'update',id:instance.id,etag:r.body.event.etag,event:{...draft,reminder_30_enabled:true,reminder_minutes:1020}});assert.equal(r.status,200);assert.equal(r.body.event.reminder_30_enabled,true);assert.equal(r.body.event.reminder_minutes,1020);
 f=fixture();r=await f.request({action:'update',id:master.id,etag:master.etag,event:{...draft,reminder_30_enabled:false}});assert.equal(r.status,200);assert.equal(r.body.event.reminder_30_enabled,false);
 f=fixture();r=await f.request({action:'update',id:master.id,etag:master.etag,event:{...draft,reminder_30_enabled:'false'}});assert.equal(r.status,400);assert.equal(f.calls.filter(c=>c.method==='PATCH').length,0);
+
+for(const headers of [{'x-hh-transition':'bad',origin:'https://foreign.invalid'},{'x-hh-transition':transitionToken,origin:'https://foreign.invalid'}]){f=fixture({transition:false});r=await f.request({action:'events'},headers);assert.equal(r.status,401);assert.equal(f.calls.length,0)}
+f=fixture({transition:true,validToken:false});r=await f.request({action:'events',from:'2028-02-01T05:00:00Z',to:'2028-03-01T05:00:00Z'},{'x-hh-transition':transitionToken,origin:'https://foreign.invalid'});assert.equal(r.status,200);assert.ok(r.body.events.length>0);
+f=fixture({transition:true});r=await f.request({action:'start'},{'x-hh-transition':transitionToken});assert.equal(r.status,401);assert.equal(f.calls.length,0);
+f=fixture({transition:true});r=await f.request({action:'events',householdId:'22222222-2222-4222-8222-222222222222'},{'x-hh-transition':transitionToken});assert.equal(r.status,401);assert.equal(f.calls.length,0);
+console.log('Source transition gateway passed: configured credential and household only, existing membership required, OAuth actions blocked, ordinary sessions unchanged.');

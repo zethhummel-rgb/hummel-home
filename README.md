@@ -122,3 +122,9 @@ Schema: `supabase/migrations/20261018120551_recurring_household_reminders.sql`. 
 Event editors now start new timed events at 09:00–09:30. Changing the start time resets the end to 30 minutes later and advances the end date across midnight; end fields remain editable. Date rollover and year-boundary behavior are covered by the calendar checks, and the mobile editor was checked with synthetic preview data.
 
 Month-view day taps open a compact day popup instead of a panel underneath the calendar. It shows the selected full date/year, matching events, and an Add event button that prefills that exact date. Event taps open read-only details first; closing details returns to the day popup, while Edit opens the event editor. Empty-day messages, keyboard Escape/focus restoration, and date-prefilled creation were checked in the mobile preview. The existing Agenda and Search views remain available.
+
+
+### Owner-requested transition to HH Family
+The optional `household-transition.sql` configuration and Google handler support an explicit, household-scoped temporary connection to HH Family. A new server credential authorizes only the configured source household and current owner; it is separate from Google OAuth, Auth sessions, and push subscriptions. Ordinary original-app requests keep their existing authentication and behavior. Shared calendar changes retain provider etag checks, recurrence and person tags; list changes retain the existing reminder completion trigger and version checks. Only the configured HH household can use the connection. Source records are not deleted or replaced.
+
+Final cutover is a separate operation: freeze edits, take and verify the final preservation snapshot, import and verify native HH data, then retire the transition. Do not retire this connection or remove the original app until the family is ready and the final import has been checked.
