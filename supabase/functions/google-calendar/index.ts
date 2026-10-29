@@ -1,4 +1,4 @@
-import {authorizeTransition,transitionItems,transitionChange} from './transition.ts';
+import {authorizeTransition,transitionItems,transitionChange,transitionState,transitionWriteBlocked} from './transition.ts';
 import {reminderMinutes,readReminder} from './reminders.ts';
 import {encodePersonIds,decodePersonIds} from './tags.ts';
 import {searchParameters} from './search.ts';
@@ -19,7 +19,7 @@ const random=()=>base64(crypto.getRandomValues(new Uint8Array(32)));
 async function service(action:string,payload:Record<string,unknown>){const r=await admin.rpc('calendar_service',{action,payload});if(r.error)throw Error('Calendar connection storage is unavailable.');return r.data;}
 async function google(access:string,path:string,method='GET',body?:unknown,etag?:string){
  const requestUrl=new URL('https://www.googleapis.com/calendar/v3/'+path);if(method!=='GET'&&path.includes('/events'))requestUrl.searchParams.set('sendUpdates','none');
- const r=await fetch(requestUrl,{method,headers:{Authorization:'Bearer '+access,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},body:body?JSON.stringify(body):undefined});
+ const r=await fetch(requestUrl,{method,headers:{Authorization:'Bearer '+access,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(8000)});
  if(r.status===204)return null;
  const data=await r.json();
  if(!r.ok){if(r.status===412)throw Error('This event changed in Google Calendar. Refresh and try again.');if(r.status===409)throw Error('This event may already have been saved. Refresh the calendar before trying again.');if(r.status===401||r.status===403)throw Error('Google Calendar permission is unavailable. The household owner needs to reconnect Google.');throw Error('Google Calendar could not complete this request. Please refresh before retrying a change.');}
@@ -50,6 +50,7 @@ Deno.serve(async(req:Request)=>{
    if(url.searchParams.has('error'))return redirect(false,'Google Calendar permission was not granted.');
    const code=url.searchParams.get('code');if(!code||!ID||!SECRET)return redirect(false,'Google connection is not configured yet.');
    const member=await admin.from('households').select('owner_id,name').eq('id',record.household_id).single();if(member.error||member.data.owner_id!==record.user_id)return redirect(false,'Only the current household owner can connect Google.');
+   if(transitionWriteBlocked(await transitionState(admin,record.household_id)))return redirect(false,'Your family has moved to HH Family. Open HH to manage your calendar.');
    const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:ID,client_secret:SECRET,code,code_verifier:record.verifier,redirect_uri:CALLBACK,grant_type:'authorization_code'})});
    const tokens=await response.json();if(!response.ok||!tokens.access_token||!tokens.refresh_token)return redirect(false,'Google did not grant an ongoing connection. Please reconnect and allow calendar access.');
    const old=await service('connection_get',{householdId:record.household_id});let calendar;
@@ -74,6 +75,8 @@ Deno.serve(async(req:Request)=>{
   const auth=bridge?{data:{user:{id:bridge.ownerId}},error:null}:await admin.auth.getUser(bearer!);if(auth.error||!auth.data.user)return json({error:'Sign in again to open the calendar'},401);
   const b=bridge?bridge.body:await req.json();if(typeof b.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(b.householdId))return json({error:'Invalid household'},400);
   const membership=await admin.from('household_members').select('role').eq('household_id',b.householdId).eq('user_id',auth.data.user.id).maybeSingle();if(membership.error||!membership.data)return json({error:'This household is not available to your account'},403);
+  const transition=await transitionState(admin,b.householdId);
+  if(['start','create','update','delete','transition_change'].includes(b.action)&&transitionWriteBlocked(transition))return json({error:transition.completed?'Your family has moved to HH Family. Open HH to make changes.':'Your household transfer is in progress. Please wait a moment and refresh HH.'},409);
   if(bridge&&b.action==='transition_items')return json({items:await transitionItems(admin,b.householdId)});
   if(bridge&&b.action==='transition_change')return json(await transitionChange(admin,b.householdId,b));
   const connection=await service('connection_get',{householdId:b.householdId});
@@ -92,7 +95,10 @@ Deno.serve(async(req:Request)=>{
    do{const params=new URLSearchParams({singleEvents:'false',showDeleted:'true',maxResults:'1000',...(pageToken?{pageToken}:{})});
     const result=await google(access,base+'?'+params);events.push(...(result.items||[]));pageToken=result.nextPageToken||'';if(events.length>1000)throw Error('Calendar snapshot needs a larger preservation pass');
    }while(pageToken);
-   return json({items:await transitionItems(admin,b.householdId),google:events,capturedAt:new Date().toISOString()});
+   const expanded:any[]=[];pageToken='';const now=Date.now();
+   do{const params=new URLSearchParams({singleEvents:'true',showDeleted:'false',timeMin:new Date(now-2*86400000).toISOString(),timeMax:new Date(now+8*86400000).toISOString(),timeZone:'America/Toronto',maxResults:'250',...(pageToken?{pageToken}:{})});const result=await google(access,base+'?'+params);expanded.push(...(result.items||[]));pageToken=result.nextPageToken||'';if(expanded.length>2000)throw Error('Reminder preservation window is too large')}while(pageToken);
+   const native=await admin.from('household_events').select('*').eq('household_id',b.householdId).limit(1001);if(native.error||native.data.length>1000)throw Error('Native source preservation failed');
+   return json({items:await transitionItems(admin,b.householdId),google:events,expanded,native:native.data,capturedAt:new Date().toISOString()});
   }
   if(b.action==='search'){
    const {params,asOf}=searchParameters(b);const result=await google(access,base+'?'+params);
