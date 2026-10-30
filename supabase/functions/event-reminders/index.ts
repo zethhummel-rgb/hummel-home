@@ -1,3 +1,4 @@
+import {transitionState,transitionWriteBlocked} from '../google-calendar/transition.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2.118.0';
 import webpush from 'npm:web-push@3.6.7';
 import {validSubscription,isDue,recipients,deliveryKey,notificationPayload,calendarReminders,type ReminderEvent} from './logic.ts';
@@ -38,11 +39,13 @@ async function dispatch(keys:any){
   for(const householdId of await service('households')){
    if(Date.now()>deadline)break;
    try{
+    if(transitionWriteBlocked(await transitionState(admin,householdId)))continue;
     const devices=await service('devices',{householdId});
     const membership=await admin.from('household_members').select('user_id,display_name').eq('household_id',householdId);if(membership.error)throw Error('Membership unavailable');
+    const familyMembers=membership.data||[];
     async function deliver(events:ReminderEvent[]){
     for(const event of events.filter(e=>isDue(e,Date.now()))){
-     const users=recipients(event,membership.data),key=deliveryKey(event);
+     const users=recipients(event,familyMembers),key=deliveryKey(event);
      for(const device of devices.filter((d:any)=>users.includes(d.user_id))){
       if(Date.now()>deadline)break;
       if(!await service('claim',{deviceId:device.id,userId:device.user_id,key}))continue;
