@@ -103,7 +103,7 @@ revoke all on function public.push_service(text,jsonb) from public,anon,authenti
 grant execute on function public.push_service(text,jsonb) to service_role;
 create or replace function private.dispatch_reminders() returns bigint language sql security definer set search_path='' as $$
  select net.http_post(
-  url:='https://ybizqfghnplcxlmlhvyn.supabase.co/functions/v1/event-reminders',
+  url:=(select decrypted_secret from vault.decrypted_secrets where name='home_together_api_url')||'/functions/v1/event-reminders',
   headers:=jsonb_build_object('Content-Type','application/json','x-hummel-cron',(select decrypted_secret from vault.decrypted_secrets where name='hummel_push_cron')),
   body:='{"action":"dispatch"}'::jsonb,timeout_milliseconds:=55000
  );

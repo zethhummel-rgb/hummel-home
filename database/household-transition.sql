@@ -58,3 +58,30 @@ create function public.household_transition_service(action text,payload jsonb) r
 revoke all on function public.household_transition_service(text,jsonb) from public,anon,authenticated;
 grant execute on function public.household_transition_service(text,jsonb) to service_role;
 notify pgrst,'reload schema';
+
+-- While both apps remain editable, reads/writes use the original household.
+create policy transition_items_hold on public.household_items as restrictive for all to authenticated
+ using(not private.household_transition_active(household_id)) with check(not private.household_transition_active(household_id));
+create or replace function private.household_calendar_source(hid uuid) returns text
+language plpgsql stable security definer set search_path='' as $$
+begin
+ if auth.uid() is null or not private.is_member(hid) then raise exception 'Household membership required';end if;
+ if private.household_transition_active(hid) or exists(select 1 from private.calendar_copy_state where household_id=hid and not native_ready) then return 'google';end if;
+ return 'hh';
+end;$$;
+create or replace function private.native_calendar_writable(hid uuid) returns boolean
+language sql stable security definer set search_path='' as $$
+ select auth.uid() is not null and private.is_member(hid) and not private.household_transition_active(hid)
+ and not exists(select 1 from private.calendar_copy_state s where s.household_id=hid and not s.native_ready);
+$$;
+
+revoke all on function private.household_calendar_source(uuid),private.native_calendar_writable(uuid) from public,anon;
+grant execute on function private.household_calendar_source(uuid),private.native_calendar_writable(uuid) to authenticated;
+
+-- Do not silently delete one side of an unfinished move.
+create function private.guard_transition_home_delete() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ if exists(select 1 from private.household_transitions where household_id=old.id and direction='target' and active) then raise exception 'Finish the Hummel Home transition before deleting this household';end if;return old;
+end;$$;
+revoke all on function private.guard_transition_home_delete() from public,anon,authenticated;
+create trigger guard_transition_home_delete before delete on public.households for each row execute function private.guard_transition_home_delete();

@@ -14,7 +14,7 @@ export const PALETTES:Palette[]=[
  {id:'ivory',name:'Classic Ivory',description:'Warm whites and charcoal',swatches:['#EEECE5','#56544D','#B38B50'],colours:colours(['#FAF9F5','#FFFFFC','#FCFBF8','#FFFEFA','#F1EFE8','#E8E5DA','#F6F4EE','#E4E1D7','#C9C4B5','#383832','#44443D','#6C6B62','#77766C','#56544D','#414038','#9C9787','#B9B4A5','#383832'])},
 ];
 
-const storageKey=(userId:string)=>'hummel-home:palette:'+userId;
+const storageKey=(userId:string)=>'home-together:palette:'+userId;
 function validPalette(value:string|null):string{return PALETTES.some(p=>p.id===value)?value!:'blush'}
 function readPalette(userId:string):string{try{return validPalette(localStorage.getItem(storageKey(userId)))}catch{return 'blush'}}
 
