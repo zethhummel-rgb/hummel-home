@@ -1,4 +1,4 @@
-name: Publish Hummel Home
+name: Publish HH environment
 on:
   push:
     branches: [main]
@@ -21,7 +21,18 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run test:calendar
+      - run: npm run test:database
+      - run: npm run test:invitations
+      - run: npm run test:recovery
+      - run: npm run test:welcome
+      - run: npm run test:staging
+      - name: Check repository target
+        run: test "$GITHUB_REPOSITORY" = "zethhummel-rgb/hummel-home" || test "$GITHUB_REPOSITORY" = "zethhummel-rgb/hh-family"
       - run: npm run build
+        env:
+          VITE_APP_ENV: ${{ github.repository == 'zethhummel-rgb/hummel-home' && 'test' || 'production' }}
+          VITE_SUPABASE_URL: ${{ github.repository == 'zethhummel-rgb/hummel-home' && 'https://ybizqfghnplcxlmlhvyn.supabase.co' || 'https://njpdqiwrwgoothkstoql.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ github.repository == 'zethhummel-rgb/hummel-home' && 'sb_publishable_jbLSo5LPkS9k06Fx1txlBQ_3rWWkWh_' || 'sb_publishable_Ok3ZhlQo6hYLRWcl68Z_Zw_qKEauTkq' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

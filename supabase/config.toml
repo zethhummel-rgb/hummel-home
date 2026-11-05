@@ -1,0 +1,14 @@
+[functions.google-calendar]
+verify_jwt = false
+
+[functions.event-reminders]
+verify_jwt = false
+
+[functions.invitation-email]
+verify_jwt = false
+
+[functions.admin-households]
+verify_jwt = false
+
+[functions.self-service-deletion]
+verify_jwt = false

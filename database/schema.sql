@@ -1,4 +1,4 @@
--- Hummel Home only. No dependency on any JGC project.
+-- Fresh HH pilot project only. Never run against an existing family or work database.
 create schema if not exists private;
 revoke all on schema private from public;
 grant usage on schema private to authenticated;

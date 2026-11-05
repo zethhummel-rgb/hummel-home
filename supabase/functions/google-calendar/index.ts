@@ -1,14 +1,18 @@
-import {authorizeTransition,transitionItems,transitionChange,transitionState,transitionWriteBlocked} from './transition.ts';
+import {handleImportAction,handleImportCallback} from './import.ts';
+import {transitionConfig,transitionRequest,transitionState,transitionWriteBlocked} from './transition.ts';
+import {runCalendarCopy} from './copy.ts';
 import {reminderMinutes,readReminder} from './reminders.ts';
 import {encodePersonIds,decodePersonIds} from './tags.ts';
 import {searchParameters} from './search.ts';
 import {validateRecurrence} from './recurrence.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2.118.0';
-const APP='https://zethhummel-rgb.github.io/hummel-home/';
+const isTestProject=Deno.env.get('SUPABASE_URL')==='https://ybizqfghnplcxlmlhvyn.supabase.co';
+const testAppUrl='https://zethhummel-rgb.github.io/hummel-home/';
+const APP=(isTestProject?testAppUrl:Deno.env.get('APP_URL')||'https://zethhummel-rgb.github.io/hh-family/');
 const ORIGIN=new URL(APP).origin;
 const PROJECT=Deno.env.get('SUPABASE_URL')!;
-const ID=Deno.env.get('GOOGLE_CALENDAR_CLIENT_ID')||'';
-const SECRET=Deno.env.get('GOOGLE_CALENDAR_CLIENT_SECRET')||'';
+const ID=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_ID')||'';
+const SECRET=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_SECRET')||'';
 const CALLBACK=PROJECT+'/functions/v1/google-calendar/callback';
 const admin=createClient(PROJECT,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
@@ -17,16 +21,16 @@ const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest
 const base64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const random=()=>base64(crypto.getRandomValues(new Uint8Array(32)));
 async function service(action:string,payload:Record<string,unknown>){const r=await admin.rpc('calendar_service',{action,payload});if(r.error)throw Error('Calendar connection storage is unavailable.');return r.data;}
+async function copyService(action:string,householdId:string,extra:Record<string,unknown>={}){const r=await admin.rpc('calendar_copy_service',{action,payload:{householdId,...extra}});if(r.error)throw Error('Calendar copy status is unavailable. Your HH plans are preserved.');return r.data;}
 async function google(access:string,path:string,method='GET',body?:unknown,etag?:string){
- const requestUrl=new URL('https://www.googleapis.com/calendar/v3/'+path);if(method!=='GET'&&path.includes('/events'))requestUrl.searchParams.set('sendUpdates','none');
- const r=await fetch(requestUrl,{method,headers:{Authorization:'Bearer '+access,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(8000)});
+ const r=await fetch('https://www.googleapis.com/calendar/v3/'+path,{method,headers:{Authorization:'Bearer '+access,...(body?{'Content-Type':'application/json'}:{}),...(etag?{'If-Match':etag}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(8000)});
  if(r.status===204)return null;
  const data=await r.json();
  if(!r.ok){if(r.status===412)throw Error('This event changed in Google Calendar. Refresh and try again.');if(r.status===409)throw Error('This event may already have been saved. Refresh the calendar before trying again.');if(r.status===401||r.status===403)throw Error('Google Calendar permission is unavailable. The household owner needs to reconnect Google.');throw Error('Google Calendar could not complete this request. Please refresh before retrying a change.');}
  return data;
 }
 async function accessToken(connection:any){
- const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:ID,client_secret:SECRET,refresh_token:connection.refreshToken,grant_type:'refresh_token'})});
+ const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:ID,client_secret:SECRET,refresh_token:connection.refreshToken,grant_type:'refresh_token'}),signal:AbortSignal.timeout(8000)});
  const d=await r.json();if(!r.ok||!d.access_token)throw Error('Google connection needs renewing. The household owner can reconnect Google.');return d.access_token as string;
 }
 function toGoogle(e:any){
@@ -42,64 +46,78 @@ function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e
 const redirect=(ok:boolean,message='')=>{const u=new URL(APP);u.searchParams.set('calendar_connection',ok?'connected':'error');if(message)u.searchParams.set('calendar_message',message.slice(0,200));return Response.redirect(u,303)};
 Deno.serve(async(req:Request)=>{
  const url=new URL(req.url);
+ if(isTestProject&&(req.headers.has('x-hummel-cron')||url.pathname.endsWith('/callback')))return json({error:'External calendar connections are disabled in the test app.'},409);
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
+ if(req.method==='POST'&&req.headers.has('x-hummel-cron')){
+  try{
+   const raw=await req.text();if(raw.length>1024)return json({error:'Invalid copy request'},400);
+   const body=JSON.parse(raw);if(body.action!=='sync'||typeof body.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(body.householdId))return json({error:'Invalid copy request'},400);
+   const r=await admin.rpc('push_service',{action:'secrets',payload:{}});const expected=r.data?.cronSecret;
+   const digest=async(value:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));
+   const [a,b]=await Promise.all([digest(req.headers.get('x-hummel-cron')||''),digest(expected||'')]);let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];
+   if(r.error||!expected||diff)return json({error:'Unauthorized'},401);
+   return json(await runCalendarCopy(admin,body.householdId,{clientId:ID,clientSecret:SECRET}));
+  }catch{return json({error:'The Google copy could not finish. HH plans are preserved.'},400)}
+ }
  if(req.method==='GET'&&url.pathname.endsWith('/callback')){
+  if(url.searchParams.get('state')?.startsWith('hhi_'))return handleImportCallback(admin,url,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP});
   try{
    const state=url.searchParams.get('state');if(!state||state.length>200)return redirect(false,'Google connection expired. Please try connecting again.');
    const record=await service('state_take',{hash:await hash(state)});if(!record)return redirect(false,'Google connection expired. Please try connecting again.');
    if(url.searchParams.has('error'))return redirect(false,'Google Calendar permission was not granted.');
    const code=url.searchParams.get('code');if(!code||!ID||!SECRET)return redirect(false,'Google connection is not configured yet.');
    const member=await admin.from('households').select('owner_id,name').eq('id',record.household_id).single();if(member.error||member.data.owner_id!==record.user_id)return redirect(false,'Only the current household owner can connect Google.');
-   if(transitionWriteBlocked(await transitionState(admin,record.household_id)))return redirect(false,'Your family has moved to HH Family. Open HH to manage your calendar.');
    const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:ID,client_secret:SECRET,code,code_verifier:record.verifier,redirect_uri:CALLBACK,grant_type:'authorization_code'})});
    const tokens=await response.json();if(!response.ok||!tokens.access_token||!tokens.refresh_token)return redirect(false,'Google did not grant an ongoing connection. Please reconnect and allow calendar access.');
    const old=await service('connection_get',{householdId:record.household_id});let calendar;
    if(old){try{calendar=await google(tokens.access_token,'calendars/'+encodeURIComponent(old.calendarId))}catch{return redirect(false,'Reconnect using the Google account that owns your existing family calendar.');}}
-   if(!calendar)calendar=await google(tokens.access_token,'calendars','POST',{summary:member.data.name+' · Family',description:'Family plans shared through Hummel Home.',timeZone:'America/Toronto'});
+   if(!calendar)calendar=await google(tokens.access_token,'calendars','POST',{summary:member.data.name+' · Family',description:'Family plans shared through HH.',timeZone:'America/Toronto'});
    await service('connection_set',{householdId:record.household_id,userId:record.user_id,calendarId:calendar.id,refreshToken:tokens.refresh_token});
-   if(old?.migrationComplete){await service('migration_done',{householdId:record.household_id});return redirect(true);}
-   // Existing native events are copied only as part of this explicit Connect action.
-   const native=await admin.from('household_events').select('*').eq('household_id',record.household_id).limit(1001);if(native.error||native.data.length>1000)return redirect(false,'Google connected. Existing event import needs attention; your Hummel Home events are preserved.');
-   for(const e of native.data){const eventId='home'+e.id.replaceAll('-','');let exists=false;try{const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calendar.id)+'/events/'+eventId,{headers:{Authorization:'Bearer '+tokens.access_token}});exists=r.ok;if(!r.ok&&r.status!==404)throw Error('Import check failed')}catch{return redirect(false,'Google connected, but the existing event import could not finish. Reconnect to retry safely.');}
-    if(!exists)await google(tokens.access_token,'calendars/'+encodeURIComponent(calendar.id)+'/events','POST',{...toGoogle(e),id:eventId});
-   }
+   // Google is an outbound copy. Legacy Google homes are preserved and
+   // verified by the background worker before the source switches to HH.
    await service('migration_done',{householdId:record.household_id});return redirect(true);
   }catch{return redirect(false,'Google Calendar could not finish connecting. Your existing household events are preserved.');}
  }
  if(req.method!=='POST')return json({error:'Not found'},404);
- let bridge:any=null;
- if(req.headers.has('x-hh-transition')){try{bridge=await authorizeTransition(admin,req)}catch{return json({error:'Transition authorization required'},401)}}
- if(!bridge&&req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+ if(req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+ let legacyLease='',legacyHousehold='';
  try{
-  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bridge&&!bearer)return json({error:'Sign in first'},401);
-  const auth=bridge?{data:{user:{id:bridge.ownerId}},error:null}:await admin.auth.getUser(bearer!);if(auth.error||!auth.data.user)return json({error:'Sign in again to open the calendar'},401);
-  const b=bridge?bridge.body:await req.json();if(typeof b.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(b.householdId))return json({error:'Invalid household'},400);
+  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Sign in first'},401);
+  const auth=await admin.auth.getUser(bearer);if(auth.error||!auth.data.user)return json({error:'Sign in again to open the calendar'},401);
+  const raw=await req.text();if(raw.length>160000)return json({error:'Request too large'},400);const b=JSON.parse(raw);if(typeof b.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(b.householdId))return json({error:'Invalid household'},400);
   const membership=await admin.from('household_members').select('role').eq('household_id',b.householdId).eq('user_id',auth.data.user.id).maybeSingle();if(membership.error||!membership.data)return json({error:'This household is not available to your account'},403);
-  const transition=await transitionState(admin,b.householdId);
-  if(['start','create','update','delete','transition_change'].includes(b.action)&&transitionWriteBlocked(transition))return json({error:transition.completed?'Your family has moved to HH Family. Open HH to make changes.':'Your household transfer is in progress. Please wait a moment and refresh HH.'},409);
-  if(bridge&&b.action==='transition_items')return json({items:await transitionItems(admin,b.householdId)});
-  if(bridge&&b.action==='transition_change')return json(await transitionChange(admin,b.householdId,b));
-  const connection=await service('connection_get',{householdId:b.householdId});
-  if(b.action==='status')return json({configured:!!(ID&&SECRET),connected:!!connection&&connection.migrationComplete,setupRequired:!(ID&&SECRET),importIncomplete:!!connection&&!connection.migrationComplete});
+  if(isTestProject&&(b.action==='start'||b.action==='sync'||typeof b.action==='string'&&b.action.startsWith('import_')))return json({error:'Google copy and import are disabled in the test app. Native calendars work normally.'},409);
+  if(typeof b.action==='string'&&b.action.startsWith('import_'))return json(await handleImportAction(admin,b,auth.data.user.id,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP}));
+  const cutover=await transitionState(admin,b.householdId);
+  if(transitionWriteBlocked(cutover)&&['start','sync','create','update','delete','transition_change'].includes(b.action))return json({error:'Your household transfer is in progress. Please wait a moment and refresh HH.'},409);
+  const transition=await transitionConfig(admin,b.householdId);
+  if(transition){
+   if(b.action==='transition_snapshot')return json({error:'Preservation snapshots are server-only'},403);
+   if(b.action==='status')return json({configured:true,connected:true,googleConnected:true,nativeReady:false,copyStatus:'transition'});
+   return json(await transitionRequest(transition,b.action,b));
+  }
+  const copy=await copyService('status',b.householdId);
+  if(b.action==='status')return json({configured:!!(ID&&SECRET),setupRequired:!(ID&&SECRET),connected:!copy.nativeReady&&copy.googleConnected,importIncomplete:false,...copy});
+  if(b.action==='sync'){
+   if(membership.data.role!=='owner')return json({error:'Only the household owner can request a Google copy'},403);
+   return json(await runCalendarCopy(admin,b.householdId,{clientId:ID,clientSecret:SECRET}));
+  }
   if(b.action==='start'){
    if(membership.data.role!=='owner')return json({error:'Only the household owner can connect Google'},403);
-   if(!ID||!SECRET)return json({error:'Google connection needs its one-time Google Cloud setup. Your Hummel Home calendar already works and saves family events.'},409);
+   if(!ID||!SECRET)return json({error:'Google connection needs its one-time Google Cloud setup. Your HH calendar already works and saves family events.'},409);
    const state=random(),verifier=random(),challenge=base64(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))));
    await service('state_create',{hash:await hash(state),verifier,userId:auth.data.user.id,householdId:b.householdId});
    const googleUrl=new URL('https://accounts.google.com/o/oauth2/v2/auth');googleUrl.search=new URLSearchParams({client_id:ID,redirect_uri:CALLBACK,response_type:'code',scope:'https://www.googleapis.com/auth/calendar.app.created',access_type:'offline',prompt:'consent',state,code_challenge:challenge,code_challenge_method:'S256'}).toString();return json({url:googleUrl.toString()});
   }
-  if(!ID||!SECRET||!connection?.migrationComplete)return json({error:'Google is not connected. Your Hummel Home calendar is still available.'},409);
-  const access=await accessToken(connection),base='calendars/'+encodeURIComponent(connection.calendarId)+'/events';
-  if(bridge&&b.action==='transition_snapshot'){
-   const events:any[]=[];let pageToken='';
-   do{const params=new URLSearchParams({singleEvents:'false',showDeleted:'true',maxResults:'1000',...(pageToken?{pageToken}:{})});
-    const result=await google(access,base+'?'+params);events.push(...(result.items||[]));pageToken=result.nextPageToken||'';if(events.length>1000)throw Error('Calendar snapshot needs a larger preservation pass');
-   }while(pageToken);
-   const expanded:any[]=[];pageToken='';const now=Date.now();
-   do{const params=new URLSearchParams({singleEvents:'true',showDeleted:'false',timeMin:new Date(now-2*86400000).toISOString(),timeMax:new Date(now+8*86400000).toISOString(),timeZone:'America/Toronto',maxResults:'250',...(pageToken?{pageToken}:{})});const result=await google(access,base+'?'+params);expanded.push(...(result.items||[]));pageToken=result.nextPageToken||'';if(expanded.length>2000)throw Error('Reminder preservation window is too large')}while(pageToken);
-   const native=await admin.from('household_events').select('*').eq('household_id',b.householdId).limit(1001);if(native.error||native.data.length>1000)throw Error('Native source preservation failed');
-   return json({items:await transitionItems(admin,b.householdId),google:events,expanded,native:native.data,capturedAt:new Date().toISOString()});
+  if(copy.nativeReady)return json({error:'Your calendar is saved in HH now. Refresh HH before changing or searching for plans.'},409);
+  if(['create','update','delete'].includes(b.action)){
+   const lock=await copyService('legacy_lock',b.householdId);
+   if(!lock?.lease)return json({error:'Your existing calendar is being safely transferred to HH. Please try again in a moment.'},409);
+   legacyLease=lock.lease;legacyHousehold=b.householdId;
   }
+  const connection=await service('connection_get',{householdId:b.householdId});
+  if(!ID||!SECRET||!connection?.migrationComplete)return json({error:'Google is not connected. Your HH calendar is still available.'},409);
+  const access=await accessToken(connection),base='calendars/'+encodeURIComponent(connection.calendarId)+'/events';
   if(b.action==='search'){
    const {params,asOf}=searchParameters(b);const result=await google(access,base+'?'+params);
    return json({events:(result.items||[]).filter((e:any)=>e.status!=='cancelled').map(fromGoogle),nextPageToken:result.nextPageToken||null,asOf});
@@ -122,4 +140,5 @@ Deno.serve(async(req:Request)=>{
   if(current.recurringEventId&&b.event?.recurrence!==undefined)return json({error:'Choose the whole series to change how this event repeats.'},400);
   const draft=toGoogle(b.event);const event=await google(access,base+'/'+encodeURIComponent(b.id),'PATCH',{...draft,extendedProperties:{...current.extendedProperties,shared:{...current.extendedProperties?.shared,...draft.extendedProperties.shared,...(b.event.person_ids===undefined&&current.extendedProperties?.shared?.hummel_person!==b.event.person?{hummel_people:''}:{})}}},b.etag);return json({event:fromGoogle(event)});
  }catch(e){return json({error:e instanceof Error?e.message:'Calendar request failed'},400);}
+ finally{if(legacyLease)try{await copyService('finish',legacyHousehold,{lease:legacyLease})}catch{}}
 });
