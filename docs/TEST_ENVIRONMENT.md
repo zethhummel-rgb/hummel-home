@@ -33,3 +33,7 @@ Do not use a moving branch tip as proof of which version was tested. Compare the
 Maple House has Alex (tester login), Jamie, Riley and Casey; 12 events; 16 groceries; 10 tasks; 6 staples; 4 notes; 4 favourite recipes; 29 meal plans across all slots; a sample unread update and two invalid-domain invitations. Dates are relative to the seed's Toronto date. Some records deliberately have missing quantities, no store, decimal quantities, completed states, recurrence, cancelled occurrences, or expired invitations.
 
 The initial reset script is specific to the observed legacy database and rejects any project already containing HH's pilot schema. It is kept outside `supabase/migrations` and is never run by Pages.
+
+## Feedback email exception
+
+Send Feedback may deliver only to hummelhomeapp@gmail.com when a test sender app password is configured. It labels mail [HH TEST]. This does not enable invitation emails, Google sync or push. See FEEDBACK.md for deployment, credentials, privacy and verification limits.
