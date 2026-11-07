@@ -1,0 +1,44 @@
+name: TEST browser journeys
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: test-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    if: github.repository == 'zethhummel-rgb/hummel-home'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_APP_ENV: test
+      VITE_SUPABASE_URL: https://ybizqfghnplcxlmlhvyn.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_jbLSo5LPkS9k06Fx1txlBQ_3rWWkWh_
+      HH_POLISH_OUTPUT: artifacts/requested-followup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install the pinned browser test runner
+        run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run build
+      - name: Run all 36 configurations and focused checks
+        run: |
+          node scripts/polish-browser/journeys.cjs
+          node scripts/polish-browser/focused.cjs
+          node scripts/polish-browser/signup.cjs
+          node scripts/polish-browser/meals.cjs
+          node scripts/polish-browser/household-name.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-browser-results
+          path: artifacts/requested-followup
+          retention-days: 14
