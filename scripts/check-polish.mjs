@@ -5,10 +5,10 @@ const read=f=>fs.readFileSync(new URL('../'+f,import.meta.url),'utf8');const loa
 const homeMarkup=read('src/Household.tsx');
 const homeOrder=['className="home-encouragement"','<HomeCountdowns householdId','<ActivityBanner state={activity}','<section className="card today-card home-today-card"','<WeekPreview','className="dashboard"','<section className="card grocery-card"'];
 let homeIndex=-1;for(const section of homeOrder){const position=homeMarkup.indexOf(section,homeIndex+1);assert.ok(position>homeIndex,`Home dashboard order changed near ${section}`);homeIndex=position;}
-assert.ok(!read('src/polish.css').includes('.home-page .page-heading{'),'The visual polish must not override the existing Home heading layout');
+assert.ok(read('src/polish.css').includes('.home-page .page-heading{'),'The requested compact Home heading must be applied');
 const eventMarkup=read('src/EventEditor.tsx');
-let fieldIndex=-1;for(const field of ['className="event-countdown-setting"','className="reminder-settings"','className="repeat-settings"','className="event-tag-picker"','Location (optional)','Notes (optional)']){const position=eventMarkup.indexOf(field,fieldIndex+1);assert.ok(position>fieldIndex,`Original event field order changed near ${field}`);fieldIndex=position;}
-assert.ok(!eventMarkup.includes('className="event-options"'),'Event settings must not be hidden behind an unsolicited layout change');
+assert.ok(eventMarkup.indexOf('className="event-tag-picker"')<eventMarkup.indexOf('className="event-options"'),'Family selections remain outside More options');
+assert.ok(eventMarkup.includes('className="event-save-bar"'),'Save remains reachable');
 const buttonCss=read('src/polish.css');
 const reminderTarget=buttonCss.match(/\.reminder-row > \.checkbox\{([^}]*)\}/)?.[1]||'';
 const reminderSquare=buttonCss.match(/\.reminder-row > \.checkbox::before\{([^}]*)\}/)?.[1]||'';
@@ -24,6 +24,8 @@ const spring=movedEventEnd('2027-03-13','00:30','2027-03-13','04:30','2027-03-14
 assert.equal(movedEventEnd('2026-11-07','10:00','2026-11-07','12:00','2026-11-07',''),null);assert.equal(movedEventEnd('2026-11-07','12:00','2026-11-07','10:00','2026-11-07','13:00'),null);
 const {totalMealIngredients}=await load(read('src/mealShoppingTotals.ts'));const ingredient=(quantity,unit=null,title='Carrots')=>({id:crypto.randomUUID(),title,category:'Produce',quantity,unit});
 assert.equal(totalMealIngredients([ingredient(2),ingredient(2)])[0].quantity,4);assert.equal(totalMealIngredients([ingredient(.125,'kg'),ingredient(.125,'KG',' carrots ')])[0].quantity,.25);assert.equal(totalMealIngredients([ingredient(2,'kg'),ingredient(2,'g'),ingredient(null),ingredient(1) ]).length,4);
+const {householdName}=await load(read('src/householdName.ts'));for(const value of ['Hummel','The Hummel',' the The Hummel '])assert.equal(householdName(value),'The Hummel');assert.equal(householdName('Theresa'),'The Theresa');for(const value of ['','The','The the','x'.repeat(77)])assert.throws(()=>householdName(value));
+const {matchingGroceries}=await load(read('src/groceryDuplicates.ts'));const groceries=[{id:'one',title:'Whole Milk',done:false,kind:'grocery'},{id:'two',title:'whole milk',done:true,kind:'grocery'},{id:'three',title:'Whole Milk',done:false,kind:'task'}];assert.equal(matchingGroceries(groceries,' whole   MILK ').length,1);assert.equal(matchingGroceries(groceries,'whole milk',['one']).length,0);assert.equal(matchingGroceries(groceries,'').length,0);
 const db=new PGlite();await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;grant usage on schema auth to authenticated;create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;`);
 for(const file of ['schema.sql','calendar.sql','member-colours.sql','pilot.sql'])await db.exec(read('database/'+file));
 await db.exec(`alter table public.household_events add column exceptions jsonb not null default '{}';grant update(exceptions) on public.household_events to authenticated;create function private.native_calendar_writable(hid uuid) returns boolean language sql stable security invoker set search_path='' as $$select private.is_member(hid) and coalesce(current_setting('test.hold',true),'off')<>'on'$$;create function private.household_transition_active(hid uuid) returns boolean language sql stable as $$select false$$;`);
