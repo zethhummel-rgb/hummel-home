@@ -13,14 +13,14 @@ Target: [Hummel Home TEST](https://zethhummel-rgb.github.io/hummel-home/), repos
 | 05 Meal ingredient amounts are not combined | Matching names and units are totalled across selected meals. Different units and unspecified amounts remain separate. Review shows existing quantities; exact matching totals are skipped. Other existing quantities are unchanged. | Decimal/unit/limit database tests; client response checks; browser 2 L + 2 L = 4 L; hosted retry check |
 | 06 Invitation requirement appears too late | Signup explains invitation-only access before account creation, with household/new-home code choices. An invitation is required. | Signup UI and blocked empty-code request |
 | 07 Confirmation email has no recovery actions | Resend with cooldown and visible errors; change-email action retains invitation and name and clears passwords. | Intercepted signup/resend calls, redirect verification, rate-limit failure |
-| 08 Event form is too long | Basic details and people stay visible; repeat, reminders, countdown, location and notes live under More options. The save action remains within reach. | New/edit form journeys and compact layout screenshots |
+| 08 Event form is too long | Original event field sequence restored after pilot feedback: countdown, reminders, repeat, people, location, notes and Save are visible in their original order. Date/time overflow fixes and draft protection remain. | Focused event-field order assertion and compact layout checks |
 | 09 Small touch targets | Larger grocery checkmark, edit and delete targets; taller to-do action targets. Grocery controls are 44px at 390px; edit/delete narrow to 40px on the smallest layout. | Measured browser bounds |
 | 10 Active store filter is hidden | Visible store-filter chip, filtered count and one-tap clear below the compact Staples/Filters row. | Filter, close panel, inspect chip, clear |
 | 11 Search sections collapse while typing | Stable page keys preserve expanded categories as the query changes. New categories still start collapsed. | Query refinement after expanding a section |
 | 12 Members cannot correct their name | Edit own name in Settings. Self-only column permission and row policy; atomic legacy task/event assignment updates; stable event IDs; duplicate/reserved names and transfer state checked. | Synthetic access tests and hosted transaction under authenticated role |
 | 13 Public explanations are out of date | About reflects all meal sections; privacy explains offline records and feedback; terms clarify one-way Google copying and self-service deletion. | Source review against current implementation |
 | 14 Inconsistent wording | Category and Staples labels agree across the relevant controls and tutorials; event/grocery/to-do editor headings state their action. | Form journeys and copy review |
-| 15 Home hierarchy competes with daily use | Smaller greeting and encouragement; Today appears before countdowns and updates; returning families see a collapsed setup checklist. Compact wrapping family names remain at the top. | Home layouts across household sizes and long names |
+| 15 Home hierarchy competes with daily use | Original Home sequence restored after pilot feedback: daily encouragement, countdowns, activity, Today, weekly preview and supporting cards. Existing Home typography and spacing preserved. | Static regression check for original section order |
 
 The small-phone household name also now truncates with an ellipsis instead of crowding the connection indicator.
 
@@ -46,3 +46,7 @@ node scripts/polish-browser/meals.cjs
 ```
 
 `scripts/verify-polish-hosted.sql` is explicitly for the fictional TEST household and rolls back its work. Do not run it against production. A future HH promotion needs both the reviewed database changes and the client changes together; it is not part of this deployment.
+
+## Pilot feedback correction — 7 November 2026
+
+The initial audit changed established layouts without approval. Follow-up adjustments restored the Home dashboard hierarchy and event form field order without reverting underlying data, security, synchronisation or safer-form improvements. The original browser audit JSON remains a historical record of the initial run, and does not describe the final layout. TEST-only GitHub Actions checks must pass on the merged update before deployment.
