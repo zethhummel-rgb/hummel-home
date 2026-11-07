@@ -12,7 +12,7 @@ export default function GroceryTools({grouping,onGrouping,store,onStore,stores}:
   function close(){setPanel(null);trigger.current?.focus();}
   useEffect(()=>{
     if(!panel)return;
-    root.current?.querySelector<HTMLSelectElement>('select')?.focus();
+    // Leave focus on the trigger; focusing a select here opens iOS's picker.
     const outside=(event:PointerEvent)=>{if(!root.current?.contains(event.target as Node))setPanel(null);};
     const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();setPanel(null);trigger.current?.focus();}};
     document.addEventListener('pointerdown',outside);document.addEventListener('keydown',key);
