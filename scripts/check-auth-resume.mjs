@@ -31,6 +31,7 @@ function harness(){
   if(name==='react')return react;
   if(name==='react/jsx-runtime')return require(name);
   if(name==='./supabase')return supabaseModule;
+  if(name==='./offlineShopping')return {savedTrip:()=>null,forgetShopping:()=>{}};
   if(name==='./Household')return {default:Household};
   if(name==='./pilot')return {invitationFrom:()=>({pilot:'',family:''}),initialAuthMode:()=> 'login'};
   if(name==='lucide-react')return new Proxy({},{get:(_o,key)=>key});
