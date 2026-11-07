@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:welcome
       - run: npm run test:staging
       - run: npm run test:feedback
+      - run: npm run test:polish
       - run: node scripts/check-offline-shopping.mjs
       - run: node scripts/check-portal-search.mjs
       - name: Check repository target

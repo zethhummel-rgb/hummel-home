@@ -1,0 +1,684 @@
+{
+  "date": "2026-11-07",
+  "target": "Hummel Home TEST",
+  "project": "ybizqfghnplcxlmlhvyn",
+  "productionChanged": false,
+  "sourceBase": "c433b48dbeb54008aeafbf76652829fa078d3468",
+  "browserBackend": "Intercepted synthetic responses; real built application",
+  "browserChecks": 576,
+  "journeyChecks": [
+    "Household opens",
+    "Grocery add",
+    "Grocery edit",
+    "Filters do not focus select",
+    "Assigned task add",
+    "Date and time controls fit",
+    "Calendar save",
+    "Note add",
+    "Note discard protection",
+    "Saved meal add",
+    "Search spans pages",
+    "Search groups collapsed",
+    "Appearance selected",
+    "Owner controls scoped",
+    "Grocery screen and data survive reload",
+    "No runtime exceptions"
+  ],
+  "journeys": [
+    {
+      "id": 1,
+      "width": 320,
+      "people": 1,
+      "palette": "blush",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 2,
+      "width": 320,
+      "people": 1,
+      "palette": "sage",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 3,
+      "width": 320,
+      "people": 1,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 4,
+      "width": 320,
+      "people": 4,
+      "palette": "blush",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 5,
+      "width": 320,
+      "people": 4,
+      "palette": "sage",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 6,
+      "width": 320,
+      "people": 4,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 7,
+      "width": 320,
+      "people": 8,
+      "palette": "blush",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 8,
+      "width": 320,
+      "people": 8,
+      "palette": "sage",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 9,
+      "width": 320,
+      "people": 8,
+      "palette": "coastal",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 10,
+      "width": 390,
+      "people": 1,
+      "palette": "blush",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 11,
+      "width": 390,
+      "people": 1,
+      "palette": "sage",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 12,
+      "width": 390,
+      "people": 1,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 13,
+      "width": 390,
+      "people": 4,
+      "palette": "blush",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 14,
+      "width": 390,
+      "people": 4,
+      "palette": "sage",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 15,
+      "width": 390,
+      "people": 4,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 16,
+      "width": 390,
+      "people": 8,
+      "palette": "blush",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 17,
+      "width": 390,
+      "people": 8,
+      "palette": "sage",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 18,
+      "width": 390,
+      "people": 8,
+      "palette": "coastal",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 19,
+      "width": 768,
+      "people": 1,
+      "palette": "blush",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 20,
+      "width": 768,
+      "people": 1,
+      "palette": "sage",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 21,
+      "width": 768,
+      "people": 1,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 22,
+      "width": 768,
+      "people": 4,
+      "palette": "blush",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 23,
+      "width": 768,
+      "people": 4,
+      "palette": "sage",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 24,
+      "width": 768,
+      "people": 4,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 25,
+      "width": 768,
+      "people": 8,
+      "palette": "blush",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 26,
+      "width": 768,
+      "people": 8,
+      "palette": "sage",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 27,
+      "width": 768,
+      "people": 8,
+      "palette": "coastal",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 28,
+      "width": 1280,
+      "people": 1,
+      "palette": "blush",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 29,
+      "width": 1280,
+      "people": 1,
+      "palette": "sage",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 30,
+      "width": 1280,
+      "people": 1,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 31,
+      "width": 1280,
+      "people": 4,
+      "palette": "blush",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 32,
+      "width": 1280,
+      "people": 4,
+      "palette": "sage",
+      "longNames": false,
+      "owner": true,
+      "empty": false,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 33,
+      "width": 1280,
+      "people": 4,
+      "palette": "coastal",
+      "longNames": false,
+      "owner": false,
+      "empty": true,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 34,
+      "width": 1280,
+      "people": 8,
+      "palette": "blush",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "0.25",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 35,
+      "width": 1280,
+      "people": 8,
+      "palette": "sage",
+      "longNames": true,
+      "owner": false,
+      "empty": true,
+      "quantity": "12",
+      "status": "completed",
+      "checks": 16
+    },
+    {
+      "id": 36,
+      "width": 1280,
+      "people": 8,
+      "palette": "coastal",
+      "longNames": true,
+      "owner": true,
+      "empty": false,
+      "quantity": "",
+      "status": "completed",
+      "checks": 16
+    }
+  ],
+  "focused": [
+    "New event advanced fields start collapsed",
+    "Start time preserves two-hour duration",
+    "Moving event across midnight advances its end date",
+    "320px event fields fit and background scrolling is locked",
+    "Event close requires discard and Keep editing retains changes",
+    "Grocery Escape protects draft",
+    "Discarded grocery draft does not reappear",
+    "To-do backdrop protects draft",
+    "Feedback Done protects draft without sending email",
+    "Active store filter stays visible and can be cleared",
+    "Grocery row controls have 44px tap targets",
+    "Search section stays expanded as query changes",
+    "Own-name edit saves, refreshes Home and protects unfinished changes",
+    "Offline edit is saved locally",
+    "Failed online sync shows local-save status and Retry",
+    "Retry sync shares the queued edit and clears the banner",
+    "No runtime exceptions"
+  ],
+  "signup": [
+    "Signup explains invitation requirement and blocks missing code",
+    "Signup confirmation keeps the household invitation and rate-limits resend",
+    "Resend uses signup email and preserves invitation return URL",
+    "Resend failure is visible and respects cooldown",
+    "Different-email recovery retains invitation and name, clears passwords",
+    "No runtime exceptions; all email calls intercepted"
+  ],
+  "meals": [
+    "Two selected 2 L ingredients show 4 L total and disclose the existing 2 L line",
+    "Selecting just the existing 2 L amount is skipped",
+    "Submission sends both meal selections and leaves existing quantities unchanged",
+    "No runtime exceptions"
+  ],
+  "existingScripts": [
+    {
+      "command": "node scripts/check-calendar.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-calendar-auth.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-calendar-recurrence.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-native-calendar.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-people.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-reminders.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-pilot.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-calendar-copy.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-google-import-conversion.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-google-import-security.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-google-import-handler.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-week-overview.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-pilot-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-admin-households.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-self-service-deletion.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-household-reminder-jobs.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-calendar-copy-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-household-transition.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-native-cutover.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-google-import-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-grocery-staples-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-family-notes-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-meal-planner-database.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-household-activity.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-event-countdowns.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-grocery-details.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-full-meal-planning.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-meal-ingredient-quantities.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-invitation-email.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-password-recovery.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-login-storage.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-account-switch.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-auth-resume.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-household-navigation.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-welcome-tour.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-family-setup.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-notification-prompt.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-getting-started.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-feedback.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-offline-shopping.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/check-portal-search.mjs",
+      "exitCode": 0
+    }
+  ],
+  "additionalChecks": [
+    "test:staging passed",
+    "test:polish passed",
+    "Affected meal client/database suites rerun after combined-result change",
+    "Hosted authenticated-role name/assignment and meal-total/retry checks passed and rolled back",
+    "Security advisors unchanged before/after"
+  ],
+  "hostedMigration": "polish_profile_names_and_meal_totals",
+  "assets": [
+    {
+      "name": "index-B-LKJhG7.js",
+      "sha256": "dfd72a2bf10966f3bea98bd279d08233d33429221462b9326964f324489d4e2a"
+    },
+    {
+      "name": "index-Dcq00EVq.css",
+      "sha256": "e35f1ebcdabb29d4a884bcad136f3ed3914a48d8de652c542da775bf30c89a53"
+    }
+  ],
+  "limits": [
+    "No physical iPhone run",
+    "No real email delivery",
+    "No live device push delivery",
+    "Browser multi-user concurrency is simulated; database isolation is tested separately"
+  ]
+}
