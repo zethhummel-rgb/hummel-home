@@ -52,7 +52,7 @@ export default function GroceryStaples({openItemId,householdId,groceries,itemsLo
  })}
  function toggle(id:string){setSelected(old=>old.includes(id)?old.filter(value=>value!==id):old.length<100?[...old,id]:old)}
  return <section className={'grocery-staples'+(open?' is-open':'')} aria-label="Grocery staples">
-  <button type="button" className="staples-toggle" aria-expanded={open} aria-controls="staples-content" onClick={()=>setOpen(value=>!value)}><span className="staples-symbol"><Star size={19}/></span><span><b>Our staples</b><small>{loaded&&!loadError&&staples.length?`${staples.length} saved ${staples.length===1?'item':'items'} · Add what you need`:'Save your usual groceries for next time'}</small></span><ChevronDown size={18}/></button>
+  <button type="button" className="staples-toggle" aria-expanded={open} aria-controls="staples-content" onClick={()=>setOpen(value=>!value)}><span className="staples-symbol"><Star size={19}/></span><span><b>Our staples</b><small>{loaded&&!loadError&&staples.length?`${staples.length} saved`:'Your usuals'}</small></span><ChevronDown size={18}/></button>
   {open&&<div className="staples-content" id="staples-content">
    <p className="staples-intro">Keep the things you buy often here. Choose what you need, then add it to the shared shopping list.</p>
    {loadError&&<div className="staples-error" role="alert"><p>We couldn’t load your staples. {loadError}</p><button type="button" className="text-button" disabled={loading||busy} onClick={()=>void load()}>Try again</button></div>}
