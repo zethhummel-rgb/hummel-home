@@ -9,7 +9,7 @@ export default function GettingStarted({userId,householdId,active,hasEvent,notif
  onAddEvent:()=>void;onInstall:()=>void;onNotifications:()=>void;
 }){
  const [progress,setProgress]=useState(()=>gettingStartedProgress(userId,householdId));
- const [installed,setInstalled]=useState(installedApp),[expanded,setExpanded]=useState(()=>expandedByDefault||!installedApp()),[enabled,setEnabled]=useState(false);
+ const [installed,setInstalled]=useState(installedApp),[expanded,setExpanded]=useState(()=>expandedByDefault||(!installedApp()&&!hasEvent&&!progress.eventAdded)),[enabled,setEnabled]=useState(false);
  const bodyId=useId(),headingId=useId();
  useEffect(()=>{if(hasEvent&&!progress.eventAdded)setProgress(saveGettingStarted(userId,householdId,{eventAdded:true}))},[hasEvent,progress.eventAdded,userId,householdId]);
  useEffect(()=>{
