@@ -10,8 +10,8 @@ const eventMarkup=read('src/EventEditor.tsx');
 let fieldIndex=-1;for(const field of ['className="event-countdown-setting"','className="reminder-settings"','className="repeat-settings"','className="event-tag-picker"','Location (optional)','Notes (optional)']){const position=eventMarkup.indexOf(field,fieldIndex+1);assert.ok(position>fieldIndex,`Original event field order changed near ${field}`);fieldIndex=position;}
 assert.ok(!eventMarkup.includes('className="event-options"'),'Event settings must not be hidden behind an unsolicited layout change');
 const buttonCss=read('src/polish.css');
-const reminderTarget=buttonCss.match(/\\.reminder-row > \\.checkbox\\{([^}]*)\\}/)?.[1]||'';
-const reminderSquare=buttonCss.match(/\\.reminder-row > \\.checkbox::before\\{([^}]*)\\}/)?.[1]||'';
+const reminderTarget=buttonCss.match(/\.reminder-row > \.checkbox\{([^}]*)\}/)?.[1]||'';
+const reminderSquare=buttonCss.match(/\.reminder-row > \.checkbox::before\{([^}]*)\}/)?.[1]||'';
 for(const size of ['width:44px','height:44px','min-height:44px','margin-inline:-12px'])assert.ok(reminderTarget.includes(size),'Reminder tap target missing '+size);
 for(const size of ['width:20px','height:20px','border-radius:5px'])assert.ok(reminderSquare.includes(size),'Reminder checkbox square missing '+size);
 assert.ok(buttonCss.includes('.reminder-row > .checkbox[aria-pressed="true"]::before'),'Checked reminder square needs a filled state');
