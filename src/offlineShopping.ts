@@ -224,7 +224,11 @@ export async function syncTrip(trip:Trip) {
         const name = current.rows.find(item => item.id === id)?.title || 'Grocery item';
         const matches=server&&Object.entries(payload).every(([key,value])=>
           key==='done'?!!server.done===value:((server as Record<string,unknown>)[key]??null)===(value??null));
-        if (!server || (!matches && !result.data)) {
+        // A checkmark acknowledgement proves nothing about item details. If a
+        // new draft was saved while that acknowledgement was lost, review it
+        // before rebasing it onto details another device may have changed.
+        const uncertainDraft=!result.data&&pending?.draft&&!attempt.draft&&pending.token!==attempt.token;
+        if (!server || (!matches && !result.data) || uncertainDraft) {
           if(pending?.draft){pending.conflict={server:server?shoppingItem(server):null};delete pending.attempt;}
           else{
             current.notices.push(server ? name + ' changed on another device. Review it before checking it again.' : name + ' was removed from the shared list.');
