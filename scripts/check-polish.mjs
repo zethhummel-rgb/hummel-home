@@ -6,6 +6,9 @@ const homeMarkup=read('src/Household.tsx');
 const homeOrder=['className="home-encouragement"','<HomeCountdowns householdId','<ActivityBanner state={activity}','<section className="card today-card home-today-card"','<WeekPreview','className="dashboard"','<section className="card grocery-card"'];
 let homeIndex=-1;for(const section of homeOrder){const position=homeMarkup.indexOf(section,homeIndex+1);assert.ok(position>homeIndex,`Home dashboard order changed near ${section}`);homeIndex=position;}
 assert.ok(!read('src/polish.css').includes('.home-page .page-heading{'),'The visual polish must not override the existing Home heading layout');
+const eventMarkup=read('src/EventEditor.tsx');
+let fieldIndex=-1;for(const field of ['className="event-countdown-setting"','className="reminder-settings"','className="repeat-settings"','className="event-tag-picker"','Location (optional)','Notes (optional)']){const position=eventMarkup.indexOf(field,fieldIndex+1);assert.ok(position>fieldIndex,`Original event field order changed near ${field}`);fieldIndex=position;}
+assert.ok(!eventMarkup.includes('className="event-options"'),'Event settings must not be hidden behind an unsolicited layout change');
 const calendar=read('src/calendarData.ts');const dates=calendar.slice(calendar.indexOf('export function eventRequestId'),calendar.indexOf('export async function googleRequest'))+calendar.slice(calendar.indexOf('export function movedEventEnd'));
 const {movedEventEnd,zonedISO}=await load(dates);
 assert.deepEqual(movedEventEnd('2026-11-07','10:00','2026-11-07','12:00','2026-11-07','11:00'),{date:'2026-11-07',time:'13:00'});
