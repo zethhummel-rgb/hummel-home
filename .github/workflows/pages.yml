@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:welcome
       - run: npm run test:staging
       - run: npm run test:feedback
+      - run: node scripts/check-offline-shopping.mjs
       - name: Check repository target
         run: test "$GITHUB_REPOSITORY" = "zethhummel-rgb/hummel-home" || test "$GITHUB_REPOSITORY" = "zethhummel-rgb/hh-family"
       - run: npm run build
