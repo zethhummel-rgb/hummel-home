@@ -1,5 +1,5 @@
 // Synthetic browser regression test. Build VITE_APP_ENV=test first; API requests are mocked.
-const {chromium,webkit}=require(process.env.HH_PLAYWRIGHT_MODULE||'playwright');
+const {launchBrowser}=require('./browser.cjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const dir=path.resolve('dist'),home='11111111-1111-4111-8111-111111111111',uid='22222222-2222-4222-8222-222222222222';
 const user={id:uid,email:'shopper@example.invalid',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
@@ -23,7 +23,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;const creations=[];
    res.end(fs.readFileSync(p));
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
- browser=await chromium.launch({headless:true,...(process.env.HH_CHROMIUM_EXECUTABLE?{executablePath:process.env.HH_CHROMIUM_EXECUTABLE}:{}),args:['--disable-background-networking']});
+ browser=await launchBrowser();
  const context=await browser.newContext({viewport:{width:390,height:844}});
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
