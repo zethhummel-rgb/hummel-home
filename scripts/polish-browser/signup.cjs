@@ -1,5 +1,6 @@
 // Synthetic browser regression test. Build VITE_APP_ENV=test first; API requests are mocked.
 const {launchBrowser}=require('./browser.cjs');
+const {setFixtureHandler,serveFixture,redirectFixtureAPI}=require('./fixture-api.cjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const dir=path.resolve('dist'),home='11111111-1111-4111-8111-111111111111',uid='22222222-2222-4222-8222-222222222222';
 const user={id:uid,email:'shopper@example.invalid',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
@@ -15,11 +16,11 @@ const b64=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
 const session={access_token:[b64({alg:'HS256',typ:'JWT'}),b64({exp,sub:uid,aud:'authenticated',role:'authenticated',session_id:home}),'fixture'].join('.'),refresh_token:'fixture',expires_in:86400,expires_at:exp,token_type:'bearer',user};
 let server,browser,page,serve=true,writes=0,failWrites=false;
 (async()=>{fs.mkdirSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),{recursive:true});
- server=http.createServer((req,res)=>{
+ server=http.createServer(async(req,res)=>{if(await serveFixture(req,res))return;
    if(!serve){req.socket.destroy();return;}
    let rel=new URL(req.url,'http://localhost').pathname.replace(/^\/hummel-home\//,'')||'index.html';
    const p=path.join(dir,rel);if(!p.startsWith(dir)||!fs.existsSync(p)||!fs.statSync(p).isFile()){res.writeHead(404);res.end();return}
-   res.setHeader('Content-Security-Policy',"connect-src 'self' https://ybizqfghnplcxlmlhvyn.supabase.co; font-src 'self' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self'");res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webmanifest':'application/manifest+json','.png':'image/png','.svg':'image/svg+xml'})[path.extname(p)]||'application/octet-stream');
+   res.setHeader('Content-Security-Policy',"connect-src 'self'; font-src 'self' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self'");res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.webmanifest':'application/manifest+json','.png':'image/png','.svg':'image/svg+xml'})[path.extname(p)]||'application/octet-stream');
    res.end(fs.readFileSync(p));
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
@@ -28,8 +29,8 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  const requests=[],checks=[],errors=[];let resendFail=false;
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
- await context.routeWebSocket('**/*',socket=>socket.close());
- await context.route('https://ybizqfghnplcxlmlhvyn.supabase.co/**',async route=>{const req=route.request(),u=new URL(req.url());requests.push({path:u.pathname,query:u.search,body:req.postDataJSON()});if(u.pathname.endsWith('/signup'))return route.fulfill({status:200,json:{user:{...user,email:req.postDataJSON().email,email_confirmed_at:null},session:null}});if(u.pathname.endsWith('/resend'))return route.fulfill({status:resendFail?429:200,json:resendFail?{msg:'Please wait before requesting another email.',error_code:'over_email_send_rate_limit'}:{}});return route.fulfill({status:200,json:[]})});
+ await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
+ setFixtureHandler(async route=>{const req=route.request(),u=new URL(req.url());requests.push({path:u.pathname,query:u.search,body:req.postDataJSON()});if(u.pathname.endsWith('/signup'))return route.fulfill({status:200,json:{user:{...user,email:req.postDataJSON().email,email_confirmed_at:null},session:null}});if(u.pathname.endsWith('/resend'))return route.fulfill({status:resendFail?429:200,json:resendFail?{msg:'Please wait before requesting another email.',error_code:'over_email_send_rate_limit'}:{}});return route.fulfill({status:200,json:[]})});
  page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));await page.clock.install();
  const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish');function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'signup.json'),JSON.stringify({checks,errors,requests},null,2));console.log('PASS '+name)}
  await page.goto(url);await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByText('HH is invitation-only during the pilot.',{exact:true}).waitFor();await page.getByLabel('Your name',{exact:true}).fill('Test Person');await page.getByLabel('Email address',{exact:true}).fill('polish@example.invalid');await page.getByLabel(/^Password/).fill('Fixture-password-123');await page.getByLabel(/^Confirm password/).fill('Fixture-password-123');await page.getByRole('button',{name:'Create my account',exact:true}).click();assert.equal(requests.filter(x=>x.path.endsWith('/signup')).length,0);pass('Signup explains invitation requirement and blocks missing code');
