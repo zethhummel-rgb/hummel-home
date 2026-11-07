@@ -4,6 +4,7 @@ import type { ReminderItem } from './taskReminders';
 
 export type ShoppingItem = {
   id: string; title: string; done: boolean; version: number; detail: string; category: string;
+  quantity?:number|null; unit?:string|null; store?:string|null;
 };
 type Pick = { done: boolean; version: number; token: string };
 export type Trip = {
@@ -12,7 +13,13 @@ export type Trip = {
 };
 const fields = 'id,title,done,reminder_version,category,grocery_quantity,grocery_unit,grocery_store';
 export const tripEvent = 'hh-shopping-update';
-export const tripOpen = 'hh-shopping-open';
+export function groceryItems(trip:Trip):ReminderItem[] {
+  return trip.rows.map(row => ({
+    id:row.id, kind:'grocery', title:row.title, category:row.category, person:'Everyone', due:'', createdAt:'',
+    done:Number(trip.picks[row.id]?.done ?? row.done), reminder_version:row.version,
+    grocery_quantity:row.quantity, grocery_unit:row.unit, grocery_store:row.store
+  }));
+}
 
 function slot() {
   const choice = currentAccountStorage();
@@ -57,13 +64,18 @@ type RawItem = {id:string; title:string; done:number|boolean; reminder_version?:
 function shoppingItem(item: RawItem): ShoppingItem {
   const amount = item.grocery_quantity == null ? '' : [item.grocery_quantity,item.grocery_unit].filter(Boolean).join(' ');
   return { id:item.id, title:item.title, done:!!item.done, version:item.reminder_version || 1,
-    category:item.category, detail:[amount,item.grocery_store].filter(Boolean).join(' · ') };
+    category:item.category, detail:[amount,item.grocery_store].filter(Boolean).join(' · '),
+    quantity:item.grocery_quantity, unit:item.grocery_unit, store:item.grocery_store };
 }
 export async function saveGroceries(user:string, home:string, name:string, items:ReminderItem[]) {
   const rows = items.filter(item => item.kind === 'grocery').map(shoppingItem);
   await edit(user, old => {
     const same = old?.home === home ? old : null;
-    return { user, home, name, rows, saved:Date.now(), picks:same?.picks || {}, notices:same?.notices || [] };
+    const merged = rows.map(row => {
+      const previous = same?.rows.find(item => item.id === row.id);
+      return previous && previous.version > row.version ? previous : row;
+    });
+    return { user, home, name, rows:merged, saved:Date.now(), picks:same?.picks || {}, notices:same?.notices || [] };
   });
 }
 export async function pickItem(trip:Trip, id:string, done:boolean) {
@@ -115,7 +127,7 @@ export async function syncTrip(trip:Trip) {
   const client = supabase;
   const valid = () => client === supabase && slot()?.user === trip.user && savedTrip()?.home === trip.home;
   const signal = () => AbortSignal.timeout(10000);
-  await navigator.locks.request(initial.lock + ':sync', {ifAvailable:true}, async lock => {
+  return navigator.locks.request(initial.lock + ':sync', {ifAvailable:true}, async lock => {
     if (!lock || !valid()) return;
     const {data:auth,error:authError} = await client.auth.getSession();
     if (authError || auth.session?.user.id !== trip.user || !valid()) throw Error('Reconnect and sign in to sync your picks.');
@@ -162,5 +174,6 @@ export async function syncTrip(trip:Trip) {
     if (!valid()) return;
     await edit(trip.user, current => current?.home === trip.home ?
       {...current, rows:fresh.data.map(shoppingItem), saved:Date.now()} : current);
+    return true;
   });
 }

@@ -39,13 +39,18 @@ const mocks={'./config':{authNamespace:'test'},'./supabase':{supabase:client,acc
 vm.runInNewContext(ts.transpileModule(read('src/offlineShopping.ts'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,
  {exports:mod,require:n=>mocks[n],navigator:{locks,get onLine(){return now.online}},window:{dispatchEvent(){}},Event,AbortSignal,crypto});
 for(const id of ['Milk','Bread','Eggs'])rows.set(id,item(id));
+Object.assign(rows.get('Milk'),{grocery_quantity:2,grocery_unit:'litres',grocery_store:'Test market'});
 await mod.saveGroceries('a',home,'Test',[...rows.values(),{...item('secret task'),kind:'task'}]);
 assert.equal(mod.savedTrip().rows.length,3);
+assert.equal(mod.groceryItems(mod.savedTrip())[0].grocery_quantity,2);
+assert.equal(mod.groceryItems(mod.savedTrip())[0].grocery_unit,'litres');
+assert.equal(mod.groceryItems(mod.savedTrip())[0].grocery_store,'Test market');
 now.online=false;
 await mod.pickItem(mod.savedTrip(),'Milk',true);
 await mod.syncTrip(mod.savedTrip());
 assert.equal(writes,0);
 assert.equal(mod.savedTrip().picks.Milk.done,true);
+assert.equal(mod.groceryItems(mod.savedTrip())[0].done,1,'The regular grocery row reflects the queued checkmark');
 identity('b');assert.equal(mod.savedTrip(),null);identity('a');
 await mod.pickItem(mod.savedTrip(),'Bread',true);
 await mod.pickItem(mod.savedTrip(),'Eggs',true);
@@ -55,6 +60,8 @@ await assert.rejects(mod.syncTrip(mod.savedTrip()));
 assert.equal(rows.get('Milk').done,true);
 await mod.syncTrip(mod.savedTrip());
 assert.equal(writes,1,'lost acknowledgement must not apply a second write');
+await mod.saveGroceries('a',home,'Test',[item('Milk',1,false),...Array.from(rows.values()).filter(row=>row.id!=='Milk')]);
+assert.equal(mod.groceryItems(mod.savedTrip())[0].done,1,'A slower household refresh cannot replace a newer synchronized row');
 assert.equal(Object.keys(mod.savedTrip().picks).length,0);
 assert.equal(mod.savedTrip().rows.find(r=>r.id==='Eggs').done,false);
 assert.equal(mod.savedTrip().notices.length,2);

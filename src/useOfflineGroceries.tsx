@@ -1,0 +1,71 @@
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {savedTrip,saveGroceries,syncTrip,pickItem,prepareShoppingShell,tripEvent,clearNotices,groceryItems} from './offlineShopping';
+import type {ReminderItem} from './taskReminders';
+import './offline-groceries.css';
+
+export function useOfflineGroceries(user:string,home:string,name:string,items:ReminderItem[],ready:boolean,onConnected?:()=>void) {
+  const read = () => {const value=savedTrip();return value?.user===user&&value.home===home?value:null;};
+  const [trip,setTrip]=useState(read);
+  const [online,setOnline]=useState(navigator.onLine);
+  const [available,setAvailable]=useState(false);
+  const [syncing,setSyncing]=useState(false);
+  const [problem,setProblem]=useState('');
+  const running=useRef(false);
+  const alive=useRef(false);
+  const connected=useRef(onConnected);connected.current=onConnected;
+  const sync=useCallback(async()=>{
+    const current=savedTrip();
+    if(running.current||!navigator.onLine||current?.user!==user||current.home!==home)return;
+    running.current=true;setSyncing(true);
+    try {
+      const verified=await syncTrip(current);
+      if(alive.current){setProblem('');if(verified)connected.current?.();}
+    } catch {if(alive.current)setProblem('Connection interrupted. Your checkmarks are saved here and will sync when connected.');}
+    finally{running.current=false;if(alive.current)setSyncing(false);}
+  },[user,home]);
+  useEffect(()=>{
+    alive.current=true;
+    const update=()=>setTrip(read());
+    const wake=()=>{update();setOnline(navigator.onLine);if(!document.hidden)void sync();};
+    window.addEventListener(tripEvent,update);window.addEventListener('storage',update);
+    window.addEventListener('online',wake);window.addEventListener('offline',wake);
+    document.addEventListener('visibilitychange',wake);
+    const timer=setInterval(()=>{if(!document.hidden)void sync();},15000);
+    wake();
+    return()=>{alive.current=false;clearInterval(timer);window.removeEventListener(tripEvent,update);
+      window.removeEventListener('storage',update);window.removeEventListener('online',wake);
+      window.removeEventListener('offline',wake);document.removeEventListener('visibilitychange',wake);};
+  },[user,home,sync]);
+  useEffect(()=>{
+    if(!ready)return;
+    let current=true;
+    Promise.all([saveGroceries(user,home,name,items),prepareShoppingShell()]).then(()=>{
+      if(current){setAvailable(true);setProblem('');}
+    }).catch(()=>{if(current){setAvailable(false);setProblem('This browser could not save the list for offline use.');}});
+    return()=>{current=false;};
+  },[user,home,name,items,ready]);
+  async function toggle(item:ReminderItem) {
+    const current=read();
+    if(!current)throw Error('Connect and open Groceries before shopping offline.');
+    await pickItem(current,item.id,!item.done);
+    void sync();
+  }
+  async function dismiss() {if(trip)await clearNotices(trip);}
+  return {trip,items:trip?groceryItems(trip):null,online,available,syncing,problem,toggle,dismiss,sync,
+    pending:Object.keys(trip?.picks||{}).length};
+}
+export function GroceryConnection({state}:{state:ReturnType<typeof useOfflineGroceries>}) {
+  const [error,setError]=useState('');
+  const text = state.pending ? state.pending+' '+(state.pending===1?'change':'changes')+' saved on this device to sync.'
+    : state.syncing ? 'Syncing your grocery list…'
+    : !state.online ? 'Offline. Check items off as usual; they’ll sync when you reconnect.'
+    : state.available ? 'List saved on this device for offline shopping.' : '';
+  return <>
+    {text&&<p className="grocery-connection" role="status">{text}</p>}
+    {(state.problem||error)&&<p className="grocery-connection" role="alert">{error||state.problem}</p>}
+    {!!state.trip?.notices.length&&<div className="grocery-connection" role="status">
+      {state.trip.notices.map((notice,i)=><p key={i}>{notice}</p>)}
+      <button className="text-button" onClick={()=>void state.dismiss().catch(()=>setError('Could not dismiss this notice.'))}>Dismiss</button>
+    </div>}
+  </>;
+}
