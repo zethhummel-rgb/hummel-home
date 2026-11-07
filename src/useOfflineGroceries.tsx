@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {savedTrip,saveGroceries,syncTrip,pickItem,prepareShoppingShell,tripEvent,clearNotices,groceryItems} from './offlineShopping';
+import {savedTrip,saveGroceries,syncTrip,pickItem,prepareShoppingShell,tripEvent,clearNotices,groceryItems,queueGrocery,resolveGrocery} from './offlineShopping';
+import {groceryDetails,type GroceryDraft} from './groceryData';
 import type {ReminderItem} from './taskReminders';
 import './offline-groceries.css';
 
@@ -20,7 +21,7 @@ export function useOfflineGroceries(user:string,home:string,name:string,items:Re
     try {
       const verified=await syncTrip(current);
       if(alive.current){setProblem('');if(verified)connected.current?.();}
-    } catch {if(alive.current)setProblem('Connection interrupted. Your checkmarks are saved here and will sync when connected.');}
+    } catch {if(alive.current)setProblem('Could not sync yet. Your changes are saved on this device. Reconnect and retry.');}
     finally{running.current=false;if(alive.current)setSyncing(false);}
   },[user,home]);
   useEffect(()=>{
@@ -51,18 +52,35 @@ export function useOfflineGroceries(user:string,home:string,name:string,items:Re
     void sync();
   }
   async function dismiss() {if(trip)await clearNotices(trip);}
-  return {trip,items:trip?groceryItems(trip):null,online,available,syncing,problem,toggle,dismiss,sync,
+  async function save(draft:GroceryDraft,item:ReminderItem|null,id:string,addBack:boolean) {
+    const current=read();if(!current)throw Error('Connect and open Groceries before saving offline.');
+    await queueGrocery(current,draft,item,id,addBack);void sync();
+  }
+  async function resolve(id:string,keep:boolean) {if(trip){await resolveGrocery(trip,id,keep);void sync();}}
+  return {trip,items:trip?groceryItems(trip):null,online,available,syncing,problem,toggle,dismiss,sync,save,resolve,
     pending:Object.keys(trip?.picks||{}).length};
 }
 export function GroceryConnection({state}:{state:ReturnType<typeof useOfflineGroceries>}) {
   const [error,setError]=useState('');
   const text = state.pending ? state.pending+' '+(state.pending===1?'change':'changes')+' saved on this device to sync.'
     : state.syncing ? 'Syncing your grocery list…'
-    : !state.online ? 'Offline. Check items off as usual; they’ll sync when you reconnect.'
+    : !state.online ? 'Offline. Add, edit, and check off items as usual. Changes sync when you reconnect.'
     : state.available ? 'List saved on this device for offline shopping.' : '';
   return <>
     {text&&<p className="grocery-connection" role="status">{text}</p>}
     {(state.problem||error)&&<p className="grocery-connection" role="alert">{error||state.problem}</p>}
+    {Object.entries(state.trip?.picks||{}).filter(([,pick])=>pick.conflict).map(([id,pick])=>{
+      const shared=pick.conflict!.server;
+      return <div className="grocery-connection" role="status" key={id}>
+        <p><b>{pick.draft?.title||'Grocery item'}</b>: {shared?'This item changed on another device. Choose what to keep.':'This item is no longer shared, or its addition could not be confirmed.'}</p>
+        <p>Your saved edit: {pick.draft?.title} · {pick.draft?.category} {pick.draft&&groceryDetails(pick.draft)}{pick.done===undefined?'':pick.done?' · Picked up':' · On list'}</p>
+        {shared&&<p>Shared version: {shared.title} · {shared.category} {shared.detail} · {shared.done?'Picked up':'On list'}</p>}
+        <div className="grocery-conflict-actions">
+          <button className="text-button" onClick={()=>void state.resolve(id,true).catch(()=>setError('Could not save your choice.'))}>{shared?'Keep my changes':'Add as new item'}</button>
+          <button className="text-button" onClick={()=>void state.resolve(id,false).catch(()=>setError('Could not save your choice.'))}>{shared?'Use shared version':'Discard saved change'}</button>
+        </div>
+      </div>;
+    })}
     {!!state.trip?.notices.length&&<div className="grocery-connection" role="status">
       {state.trip.notices.map((notice,i)=><p key={i}>{notice}</p>)}
       <button className="text-button" onClick={()=>void state.dismiss().catch(()=>setError('Could not dismiss this notice.'))}>Dismiss</button>

@@ -89,6 +89,7 @@ export function createAccountSwitchStorage(login:LoginStorage,newGeneration=()=>
   if(!validKey(ref.key,ref.remember))throw Error('Invalid account storage');
   const backing=store(ref.remember);backing.setItem('hh:auth-generation:v1:'+ref.key,newGeneration());
   backing.removeItem('shopping:v1:'+ref.key);
+  backing.removeItem('shopping:v2:'+ref.key);
   backing.removeItem(ref.key);backing.removeItem(ref.key+'-user');backing.removeItem(ref.key+'-code-verifier');
  }
  return {base,options,keyFor,normalLoginKey,entryKey,record,readRegistry,removeReference,hasToken,storedIdentityMatches,assertDurable,activate,initial,pinBase,pinChoice,clearSelection,blockAndRemove,store};
