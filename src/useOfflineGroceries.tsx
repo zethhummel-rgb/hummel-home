@@ -62,13 +62,8 @@ export function useOfflineGroceries(user:string,home:string,name:string,items:Re
 }
 export function GroceryConnection({state}:{state:ReturnType<typeof useOfflineGroceries>}) {
   const [error,setError]=useState('');
-  const text = state.pending ? state.pending+' '+(state.pending===1?'change':'changes')+' saved on this device to sync.'
-    : state.syncing ? 'Syncing your grocery list…'
-    : !state.online ? 'Offline. Add, edit, and check off items as usual. Changes sync when you reconnect.'
-    : state.available ? 'List saved on this device for offline shopping.' : '';
   return <>
-    {text&&<p className="grocery-connection" role="status">{text}</p>}
-    {(state.problem||error)&&<p className="grocery-connection" role="alert">{error||state.problem}</p>}
+    {(error||(state.online&&state.problem))&&<p className="grocery-connection" role="alert">{error||state.problem}</p>}
     {Object.entries(state.trip?.picks||{}).filter(([,pick])=>pick.conflict).map(([id,pick])=>{
       const shared=pick.conflict!.server;
       return <div className="grocery-connection" role="status" key={id}>
