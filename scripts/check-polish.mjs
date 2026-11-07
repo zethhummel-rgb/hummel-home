@@ -1,5 +1,11 @@
 import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';import {PGlite} from '@electric-sql/pglite';
 const read=f=>fs.readFileSync(new URL('../'+f,import.meta.url),'utf8');const load=async s=>import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(s,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText).toString('base64'));
+// Keep the established Home dashboard order: daily message, countdowns,
+// family updates, Today's agenda, weekly preview, then supporting cards.
+const homeMarkup=read('src/Household.tsx');
+const homeOrder=['className="home-encouragement"','<HomeCountdowns householdId','<ActivityBanner state={activity}','<section className="card today-card home-today-card"','<WeekPreview','className="dashboard"','<section className="card grocery-card"'];
+let homeIndex=-1;for(const section of homeOrder){const position=homeMarkup.indexOf(section,homeIndex+1);assert.ok(position>homeIndex,`Home dashboard order changed near ${section}`);homeIndex=position;}
+assert.ok(!read('src/polish.css').includes('.home-page .page-heading{'),'The visual polish must not override the existing Home heading layout');
 const calendar=read('src/calendarData.ts');const dates=calendar.slice(calendar.indexOf('export function eventRequestId'),calendar.indexOf('export async function googleRequest'))+calendar.slice(calendar.indexOf('export function movedEventEnd'));
 const {movedEventEnd,zonedISO}=await load(dates);
 assert.deepEqual(movedEventEnd('2026-11-07','10:00','2026-11-07','12:00','2026-11-07','11:00'),{date:'2026-11-07',time:'13:00'});
