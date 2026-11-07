@@ -17,8 +17,12 @@ exports.serveFixture=async(req,res)=>{
 exports.redirectFixtureAPI=()=>{
  const nativeFetch=window.fetch.bind(window);
  window.fetch=(input,init)=>{
-  const request=new Request(input,init),url=new URL(request.url);
-  if(url.origin==='https://ybizqfghnplcxlmlhvyn.supabase.co')return nativeFetch(new Request(location.origin+'/__fixture_api'+url.pathname+url.search,request));
-  return nativeFetch(request);
+  const url=new URL(input instanceof Request?input.url:String(input),location.href);
+  if(url.origin==='https://ybizqfghnplcxlmlhvyn.supabase.co'){
+   const target=location.origin+'/__fixture_api'+url.pathname+url.search;
+   return nativeFetch(input instanceof Request?new Request(target,input):target,init);
+  }
+  return nativeFetch(input,init);
  };
 };
+
