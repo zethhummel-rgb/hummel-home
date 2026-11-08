@@ -120,5 +120,16 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await page.getByRole('button',{name:'Today',exact:true}).click();
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  assert.equal(await days.first().getAttribute('data-date'),today);pass('Today resets three day view to the current Eastern date');
+ await page.setViewportSize({width:390,height:844});
+ for(const chosen of ['Month','Agenda','3 Day']){
+  await view.getByRole('button',{name:chosen,exact:true}).click();
+  await page.locator('.mobile-nav').getByRole('button',{name:'Home',exact:true}).click();
+  await page.locator('.mobile-nav').getByRole('button',{name:'Calendar',exact:true}).click();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+  await page.reload();await page.locator('.native-calendar').waitFor();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+  await page.goto(url);await page.locator('.native-calendar').waitFor();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+ }pass('Month, Agenda and 3 Day each persist across navigation, refresh, notification entry and reopening the app');
  assert.deepEqual(errors,[]);pass('No browser runtime exceptions');
 })().catch(async e=>{console.error(e);if(page){fs.writeFileSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.txt'),await page.locator('body').innerText().catch(()=>''));await page.screenshot({path:path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.png')}).catch(()=>{})}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()});
