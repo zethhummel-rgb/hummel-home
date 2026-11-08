@@ -69,13 +69,13 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  }
  async function open(button){
   await prepare();
-  const before=await page.evaluate(()=>({top:document.querySelector('#scroll-test-space').getBoundingClientRect().top,y:scrollY}));
+  const before=await page.evaluate(()=>({top:document.querySelector('.shell').getBoundingClientRect().top,y:scrollY}));
   await button.evaluate(el=>el.click());await page.waitForFunction(()=>document.body.style.position==='fixed');
   assert.equal(await page.evaluate(()=>document.body.style.top),'-180px');
   return before;
  }
  async function stationary(before){
-  const top=()=>page.evaluate(()=>document.querySelector('#scroll-test-space').getBoundingClientRect().top);
+  const top=()=>page.evaluate(()=>document.querySelector('.shell').getBoundingClientRect().top);
   assert(Math.abs(await top()-before.top)<1,'Opening keeps the background in place');
   await page.mouse.move(3,3);await page.mouse.wheel(0,600);await page.waitForTimeout(100);
   await page.evaluate(()=>window.scrollTo(0,900));await page.waitForTimeout(50);
@@ -100,7 +100,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await stationary(before);await page.getByRole('button',{name:'Close grocery editor'}).click();await page.getByRole('button',{name:'Keep editing',exact:true}).click();await stationary(before);
  await page.getByRole('button',{name:'Close grocery editor'}).click();await page.getByRole('button',{name:'Discard changes',exact:true}).click();await restored(before);
  pass('Closing duplicate and discard confirmations keeps the parent editor locked');
- before=await open(page.getByRole('button',{name:'Add item',exact:true}));await page.getByLabel('Item',{exact:true}).fill('Milk');await page.getByRole('dialog').getByRole('button',{name:'Add item',exact:true}).click();await page.getByRole('button',{name:'Discard new item',exact:true}).click();await restored(before);
+ before=await open(page.getByRole('button',{name:'Add item',exact:true}));await page.getByLabel('Item',{exact:true}).fill('Milk');await page.getByRole('dialog').getByRole('button',{name:'Add item',exact:true}).click();await page.getByRole('button',{name:'Discard new item',exact:true}).click();await restored(before);assert.equal(await page.locator('.mobile-nav').evaluate(el=>el.inert),false,'Closing both dialogs releases the navigation');
  pass('Closing stacked grocery dialogs together restores scrolling once');
  await nav('To Do');before=await open(page.getByRole('button',{name:'Add to do',exact:true}).first());await stationary(before);await page.getByRole('button',{name:'Close reminder editor'}).click();await restored(before);
  pass('To-do input locks and restores page scrolling');
