@@ -15,7 +15,7 @@
 .compact-event-modal .event-date-row{display:grid;grid-template-columns:46px minmax(0,1fr);align-items:center;gap:6px;min-height:50px;border-bottom:1px solid var(--line);padding:5px 0;font-size:13px}
 .compact-event-modal .event-date-controls{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:5px;min-width:0}
 .compact-event-modal .event-date-controls.all-day-controls{grid-template-columns:minmax(0,1fr);max-width:190px;width:100%;justify-self:end}
-.compact-event-modal .event-date-controls input[type=date],.compact-event-modal .event-date-controls input[type=time]{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;border:0;border-radius:7px;min-height:40px;padding:5px;font-size:16px;line-height:1.2;background:var(--theme-tint,#f5e6ec);color:var(--ink);margin:0}
+.compact-event-modal .event-date-controls input[type=date],.compact-event-modal .event-date-controls select{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;border:0;border-radius:7px;min-height:40px;padding:5px;font-size:16px;line-height:1.2;background:var(--theme-tint,#f5e6ec);color:var(--ink);margin:0}
 .compact-event-modal .event-date-controls input::-webkit-date-and-time-value{min-width:0;text-align:center}
 .compact-event-modal .event-setting-row{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;min-height:46px;padding:7px 0;border-bottom:1px solid var(--line);margin:0;font-size:14px;line-height:1.35;color:var(--ink)}
 .compact-event-modal .event-setting-row:last-child{border-bottom:0}
