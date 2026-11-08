@@ -13,7 +13,7 @@ const meal={id:'66666666-6666-4666-8666-666666666666',household_id:home,title:'C
 const event={id:'77777777-7777-4777-8777-777777777777',household_id:home,title:'Camp registration',description:'Family day',location:'Cornwall',person:'Everyone',starts_at:'2026-12-01T15:00:00Z',ends_at:'2026-12-01T16:00:00Z',all_day:false,start_date:null,end_date:null,recurrence:[],exceptions:{},version:1};
 
 const calendarEvents=[
- {...event,id:'10000000-0000-4000-8000-000000000001',title:'Midnight finish',starts_at:'2026-12-01T03:00:00Z',ends_at:'2026-12-01T05:00:00Z'},
+ {...event,id:'10000000-0000-4000-8000-000000000001',title:'Midnight finish',starts_at:'2026-12-01T03:07:00Z',ends_at:'2026-12-01T05:00:00Z'},
  {...event,id:'10000000-0000-4000-8000-000000000002',title:'Overnight trip',starts_at:'2026-12-01T04:00:00Z',ends_at:'2026-12-01T07:00:00Z'},
  {...event,id:'10000000-0000-4000-8000-000000000003',title:'Two day holiday',all_day:true,start_date:'2026-11-30',end_date:'2026-12-02',starts_at:'2026-11-30T05:00:00Z',ends_at:'2026-12-02T05:00:00Z'},
  {...event,id:'10000000-0000-4000-8000-000000000004',title:'Riley football practice and team celebration with a very long descriptive title',person:'Riley Morgan',person_ids:['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'],starts_at:'2026-12-01T22:00:00Z',ends_at:'2026-12-01T23:00:00Z',location:'Riverside community sports field with a long entrance description'},
@@ -36,7 +36,8 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  browser=await launchBrowser();
  const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto'});
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
- await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
+ // Keep loopback requests native across service-worker-controlled reloads; the server already serves every fixture.
+ await context.route(url=>url.hostname!=='127.0.0.1',route=>route.abort('blockedbyclient'));
  await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
  setFixtureHandler(async route=>{
    if(!serve){await route.abort('internetdisconnected');return;}
@@ -64,9 +65,16 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
 
 
 
- const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[];
- page.on('pageerror',e=>errors.push(e.message));
- function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors},null,2));console.log('PASS '+name)}
+ const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[],reloadDiagnostics=[];let reloading=false;
+ page.on('pageerror',e=>{
+  // WebKit's inspector reports cancelled loopback fetches from the document being
+  // replaced as page errors. Keep these diagnostics, but do not classify them as
+  // app exceptions. Match only its bootstrap frame during our deliberate reloads.
+  const stack=e.stack||'';
+  if(reloading&&stack.includes('web-inspector://bootstrap.js')&&stack.includes(new URL(url).origin+'/__fixture_api/')&&stack.includes('due to access control checks.')){reloadDiagnostics.push(stack);return}
+  errors.push(e.message);console.error('Calendar page error:',stack||e.message);
+ });
+ function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors,reloadDiagnostics},null,2));console.log('PASS '+name)}
  // Reminder date links intentionally open Calendar directly, not Home.
  await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.native-calendar').waitFor();
  const actions=page.getByRole('group',{name:'Calendar actions',exact:true}),filter=actions.getByRole('button',{name:'Filter',exact:true});
@@ -112,7 +120,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await page.getByRole('button',{name:'Filter',exact:true}).click();await page.getByRole('dialog',{name:'Filter calendar'}).getByRole('button',{name:'Everyone',exact:true}).click();
  await page.getByRole('button',{name:'Next 3 days',exact:true}).click();assert.deepEqual(await days.evaluateAll(es=>es.map(e=>e.dataset.date)),['2026-12-03','2026-12-04','2026-12-05']);
  await page.getByRole('button',{name:'Previous 3 days',exact:true}).click();await page.getByRole('button',{name:/Midnight finish/}).waitFor();pass('Previous and next navigate three days and restore the original range');
- await page.getByRole('button',{name:/Midnight finish/}).click();await page.getByLabel('Event name').waitFor();assert.equal(await page.getByLabel('Event name').inputValue(),'Midnight finish');await page.getByRole('button',{name:'Close event editor'}).click();pass('Compact event rows still open the correct event editor');
+ await page.getByRole('button',{name:/Midnight finish/}).click();await page.getByLabel('Event name').waitFor();assert.equal(await page.getByLabel('Event name').inputValue(),'Midnight finish');assert.equal(await page.getByLabel('Start time',{exact:true}).inputValue(),'22:07');assert.equal(await page.getByLabel('Start time',{exact:true}).locator('option').count(),97);assert.equal(await page.getByLabel('End time',{exact:true}).inputValue(),'00:00');pass('Opening an existing off-quarter event preserves its exact time');await page.getByRole('button',{name:'Close event editor'}).click();pass('Compact event rows still open the correct event editor');
  await page.getByRole('button',{name:'Add event',exact:true}).click();assert.equal(await page.getByLabel('Starts',{exact:true}).inputValue(),'2026-11-30');await page.getByRole('button',{name:'Close event editor'}).click();pass('Add event uses the selected three day start');
  await view.getByRole('button',{name:'Month',exact:true}).click();await page.getByRole('button',{name:'Next month',exact:true}).click();
  await page.locator('.month-grid').getByRole('button',{name:/Thursday, December 31,/}).click();await page.getByRole('button',{name:'Close day plans'}).click();
@@ -120,5 +128,17 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await page.getByRole('button',{name:'Today',exact:true}).click();
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  assert.equal(await days.first().getAttribute('data-date'),today);pass('Today resets three day view to the current Eastern date');
+ await page.setViewportSize({width:390,height:844});
+ for(const chosen of ['Month','Agenda','3 Day']){
+  await view.getByRole('button',{name:chosen,exact:true}).click();
+  await page.locator('.mobile-nav').getByRole('button',{name:'Home',exact:true}).click();
+  await page.locator('.mobile-nav').getByRole('button',{name:'Calendar',exact:true}).click();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+  await page.waitForLoadState('networkidle');reloading=true;await page.reload();await page.locator('.native-calendar').waitFor();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+  await page.waitForLoadState('networkidle');await page.goto(url);await page.locator('.native-calendar').waitFor();
+  assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
+  await page.waitForLoadState('networkidle');await page.waitForFunction(()=>!document.querySelector('.native-calendar .spin')&&!document.querySelector('.native-calendar .error'));reloading=false;
+ }pass('Month, Agenda and 3 Day each persist across navigation, refresh, notification entry and reopening the app');
  assert.deepEqual(errors,[]);pass('No browser runtime exceptions');
 })().catch(async e=>{console.error(e);if(page){fs.writeFileSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.txt'),await page.locator('body').innerText().catch(()=>''));await page.screenshot({path:path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.png')}).catch(()=>{})}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()});
