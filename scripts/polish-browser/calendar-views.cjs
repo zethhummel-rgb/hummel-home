@@ -34,8 +34,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
  browser=await launchBrowser();
- // This suite tests calendar preferences; service-worker/offline behaviour is covered by the full journeys and focused suite.
- const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto',serviceWorkers:'block'});
+ const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto'});
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
  // Keep loopback requests native across service-worker-controlled reloads; the server already serves every fixture.
  await context.route(url=>url.hostname!=='127.0.0.1',route=>route.abort('blockedbyclient'));
@@ -66,9 +65,16 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
 
 
 
- const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[];
- page.on('pageerror',e=>{errors.push(e.message);console.error('Calendar page error:',e.stack||e.message)});
- function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors},null,2));console.log('PASS '+name)}
+ const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[],reloadDiagnostics=[];let reloading=false;
+ page.on('pageerror',e=>{
+  // WebKit's inspector reports cancelled loopback fetches from the document being
+  // replaced as page errors. Keep these diagnostics, but do not classify them as
+  // app exceptions. Match only its bootstrap frame during our deliberate reloads.
+  const stack=e.stack||'';
+  if(reloading&&stack.includes('web-inspector://bootstrap.js')&&stack.includes(new URL(url).origin+'/__fixture_api/')&&stack.includes('due to access control checks.')){reloadDiagnostics.push(stack);return}
+  errors.push(e.message);console.error('Calendar page error:',stack||e.message);
+ });
+ function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors,reloadDiagnostics},null,2));console.log('PASS '+name)}
  // Reminder date links intentionally open Calendar directly, not Home.
  await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.native-calendar').waitFor();
  const actions=page.getByRole('group',{name:'Calendar actions',exact:true}),filter=actions.getByRole('button',{name:'Filter',exact:true});
@@ -128,11 +134,11 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   await page.locator('.mobile-nav').getByRole('button',{name:'Home',exact:true}).click();
   await page.locator('.mobile-nav').getByRole('button',{name:'Calendar',exact:true}).click();
   assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
-  await page.waitForLoadState('networkidle');await page.reload();await page.locator('.native-calendar').waitFor();
+  await page.waitForLoadState('networkidle');reloading=true;await page.reload();await page.locator('.native-calendar').waitFor();
   assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
   await page.waitForLoadState('networkidle');await page.goto(url);await page.locator('.native-calendar').waitFor();
   assert.equal(await view.getByRole('button',{name:chosen,exact:true}).getAttribute('aria-pressed'),'true');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('networkidle');await page.waitForFunction(()=>!document.querySelector('.native-calendar .spin')&&!document.querySelector('.native-calendar .error'));reloading=false;
  }pass('Month, Agenda and 3 Day each persist across navigation, refresh, notification entry and reopening the app');
  assert.deepEqual(errors,[]);pass('No browser runtime exceptions');
 })().catch(async e=>{console.error(e);if(page){fs.writeFileSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.txt'),await page.locator('body').innerText().catch(()=>''));await page.screenshot({path:path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','calendar-views-failure.png')}).catch(()=>{})}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()});
