@@ -61,7 +61,10 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
 
  await page.goto(url);await page.locator('.home-family-name').first().waitFor();
  async function prepare(){
-  await page.evaluate(()=>{window.scrollTo(0,0);document.querySelector('#scroll-test-space')?.remove();const space=document.createElement('div');space.id='scroll-test-space';space.style.height='2000px';document.querySelector('main').append(space);document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,180)});
+  await page.evaluate(()=>{window.scrollTo(0,0);document.querySelector('#scroll-test-space')?.remove();const space=document.createElement('div');space.id='scroll-test-space';space.style.height='2000px';document.querySelector('main').append(space);document.documentElement.style.scrollBehavior='auto'});
+  // Finish the navigation restoration, then scroll as a user would before opening.
+  await page.mouse.move(80,200);await page.mouse.wheel(0,180);await page.waitForTimeout(100);
+  await page.evaluate(()=>window.scrollTo(0,180));
   assert.equal(await page.evaluate(()=>window.scrollY),180);
  }
  async function open(button){
