@@ -12,6 +12,7 @@
 .quick-form form,.quick-form fieldset{min-width:0;margin:0}
 .quick-form label{min-width:0;font-size:13px;line-height:1.4;gap:6px;margin:0 0 12px}
 .quick-form input:not([type=checkbox]),.quick-form select,.quick-form textarea{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:44px;padding:10px 11px;margin:0;border:1px solid var(--theme-line-strong,var(--line));border-radius:10px;background:var(--theme-field,var(--bg));color:var(--ink);font:16px/1.4 Arial,sans-serif}
+.quick-form select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .quick-form input[type=date],.quick-form input[type=time]{appearance:none;-webkit-appearance:none}
 .quick-form input::-webkit-date-and-time-value{text-align:left;min-width:0}
 .quick-form textarea{resize:vertical;min-height:76px}
