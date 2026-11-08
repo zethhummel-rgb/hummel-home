@@ -1,4 +1,24 @@
 /* Compact agenda: dates, times and plans share a row without nested cards. */
+.calendar-actions{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.calendar-actions .calendar-action{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-width:0;min-height:44px;padding:9px 8px;border:1px solid var(--theme-line-strong,#d9b2c1);border-radius:9px;color:var(--teal);background:transparent;font-size:14px;line-height:1.2;white-space:nowrap}
+.calendar-actions .calendar-action svg{flex-shrink:0}
+.calendar-actions .calendar-action:hover{background:var(--theme-tint,#f5e6ec)}
+.calendar-actions .calendar-add-event,.calendar-actions .calendar-add-event:hover{background:var(--teal);border-color:var(--teal);color:white}
+.calendar-filter-control{min-width:0}
+.calendar-filter-trigger.has-filter{background:var(--theme-tint,#f5e6ec)}
+.calendar-filter-trigger>i{width:5px;height:5px;flex:0 0 5px;border-radius:50%;background:currentColor}
+.calendar-filter-accessible{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.calendar-filter-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(280px,100%);padding:10px;border:1px solid var(--line);border-radius:13px;background:var(--theme-surface,#fffdfd);box-shadow:0 10px 30px #32182320}
+.calendar-filter-panel>header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:8px}
+.calendar-filter-panel>header strong{font-size:13px;font-weight:500;color:var(--ink)}
+.calendar-filter-panel>header button{width:44px;min-width:44px;min-height:44px}
+.calendar-filter-options{max-height:min(320px,45dvh);overflow-y:auto;overscroll-behavior:contain}
+.calendar-filter-options>button{display:flex;align-items:center;gap:9px;min-height:44px;width:100%;padding:10px;text-align:left;border-radius:7px;font-size:14px;color:var(--ink)}
+.calendar-filter-options>button:hover,.calendar-filter-options>button[aria-pressed=true]{background:var(--theme-tint,#f5e6ec)}
+.calendar-filter-options>button>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.calendar-filter-options>button>i{width:7px;height:7px;flex:0 0 7px;border-radius:50%}
+.calendar-filter-options>button>svg{flex-shrink:0;color:var(--teal)}
+@media(max-width:359px){.calendar-actions{gap:6px}.calendar-actions .calendar-action{font-size:12px;gap:5px;padding:8px 5px}}
 .native-calendar .calendar-view-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;margin:0 0 16px;padding:3px;gap:3px;border-radius:10px;background:var(--theme-tint,#f5e6ec)}
 .native-calendar .calendar-view-switch button{min-width:0;min-height:44px;padding:8px 4px;font-size:13px;white-space:nowrap}
 .native-calendar .month-toolbar{margin:12px 0 10px;flex-wrap:wrap;gap:8px}

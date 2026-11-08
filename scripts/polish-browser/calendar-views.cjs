@@ -69,6 +69,18 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors},null,2));console.log('PASS '+name)}
  // Reminder date links intentionally open Calendar directly, not Home.
  await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.native-calendar').waitFor();
+ const actions=page.getByRole('group',{name:'Calendar actions',exact:true}),filter=actions.getByRole('button',{name:'Filter',exact:true});
+ assert.deepEqual(await actions.getByRole('button').allTextContents(),['Today','Filter','Event']);
+ assert.equal(await page.getByRole('heading',{name:'Family calendar',exact:true}).count(),0);
+ assert.equal(await page.getByRole('dialog',{name:'Filter calendar'}).count(),0);
+ await filter.click();const panel=page.getByRole('dialog',{name:'Filter calendar'});await panel.waitFor();
+ assert.equal(await panel.locator('select').count(),0);assert.equal(await page.getByRole('button',{name:'Close calendar filter'}).evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('Escape');assert.equal(await panel.count(),0);assert.equal(await filter.evaluate(el=>el===document.activeElement),true);
+ await filter.click();await panel.getByRole('button',{name:'Riley Morgan',exact:true}).click();assert.equal(await panel.count(),0);assert.match(await filter.getAttribute('class'),/has-filter/);assert.match(await filter.getAttribute('title'),/Riley/);
+ await filter.click();assert.equal(await panel.getByRole('button',{name:'Riley Morgan',exact:true}).getAttribute('aria-pressed'),'true');await panel.getByRole('button',{name:'Everyone',exact:true}).click();assert.doesNotMatch(await filter.getAttribute('class'),/has-filter/);
+ for(const width of [320,390]){await page.setViewportSize({width,height:844});await filter.click();const bounds=await panel.boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=width);await page.screenshot({path:path.join(out,'calendar-filter-'+width+'.png'),fullPage:true});await page.locator('.month-move h3').click();assert.equal(await panel.count(),0)}
+ pass('Compact action row replaces the title; filter opens on demand without a native picker, restores focus, marks selection, clears and fits narrow phones');
+
  const view=page.getByRole('group',{name:'Calendar view',exact:true});
  assert.deepEqual(await view.getByRole('button').allTextContents(),['Agenda','3 Day','Month']);
  assert.equal(await view.getByRole('button',{name:'Agenda',exact:true}).getAttribute('aria-pressed'),'true');
@@ -86,6 +98,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   await page.setViewportSize({width,height:844});
   for(const mode of ['Agenda','3 Day','Month']){
    await view.getByRole('button',{name:mode,exact:true}).click();await page.evaluate(()=>document.fonts.ready);
+   const actionMetrics=await page.getByRole('group',{name:'Calendar actions',exact:true}).getByRole('button').evaluateAll(es=>es.map(e=>({y:e.getBoundingClientRect().y,h:e.getBoundingClientRect().height})));assert.equal(actionMetrics.length,3);assert(actionMetrics.every(e=>Math.abs(e.y-actionMetrics[0].y)<1&&e.h>=44));
    const metrics=await view.getByRole('button').evaluateAll(es=>es.map(e=>({y:e.getBoundingClientRect().y,h:e.getBoundingClientRect().height})));
    assert(metrics.every(e=>Math.abs(e.y-metrics[0].y)<1&&e.h>=44));
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No page overflow at '+width+' '+mode);
@@ -94,9 +107,9 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   }
  }pass('Agenda, 3 Day and Month fit 320/390/768/1280px; selector remains a single row with 44px targets');
  await view.getByRole('button',{name:'3 Day',exact:true}).click();
- await page.getByLabel('Show events for',{exact:true}).selectOption('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1');
+ await page.getByRole('button',{name:'Filter',exact:true}).click();await page.getByRole('dialog',{name:'Filter calendar'}).getByRole('button',{name:'Riley Morgan',exact:true}).click();
  await page.getByRole('button',{name:/Riley football practice/}).waitFor();assert.equal(await page.getByRole('button',{name:/Weekly piano/}).count(),0);pass('Family filtering applies to three day events');
- await page.getByLabel('Show events for',{exact:true}).selectOption('all');
+ await page.getByRole('button',{name:'Filter',exact:true}).click();await page.getByRole('dialog',{name:'Filter calendar'}).getByRole('button',{name:'Everyone',exact:true}).click();
  await page.getByRole('button',{name:'Next 3 days',exact:true}).click();assert.deepEqual(await days.evaluateAll(es=>es.map(e=>e.dataset.date)),['2026-12-03','2026-12-04','2026-12-05']);
  await page.getByRole('button',{name:'Previous 3 days',exact:true}).click();await page.getByRole('button',{name:/Midnight finish/}).waitFor();pass('Previous and next navigate three days and restore the original range');
  await page.getByRole('button',{name:/Midnight finish/}).click();await page.getByLabel('Event name').waitFor();assert.equal(await page.getByLabel('Event name').inputValue(),'Midnight finish');await page.getByRole('button',{name:'Close event editor'}).click();pass('Compact event rows still open the correct event editor');
