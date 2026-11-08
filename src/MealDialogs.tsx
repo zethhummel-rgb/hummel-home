@@ -1,3 +1,4 @@
+import {useModalScrollLock} from './useUnsavedChanges';
 import {totalMealIngredients} from './mealShoppingTotals';
 import ChoiceDialog from './ChoiceDialog';
 import {groceryNameKey} from './groceryDuplicates';
@@ -34,6 +35,7 @@ function MealContents({meal,compact=false}:{meal:MealContentDraft;compact?:boole
 }
 
 export default function MealDialogs({request,householdId,state,today,groceries,itemsLoading,itemsError,onListChanged,onOpenGroceries,onClose}:Props){
+ useModalScrollLock();
  const original=request.kind==='plan'?request.plan:request.kind==='recipe'?request.recipe:null;
  const [target,setTarget]=useState<'plan'|'recipe'>(request.kind==='recipe'?'recipe':'plan'),[current,setCurrent]=useState<SavedMeal|MealPlan|null>(original);
  const [view,setView]=useState<'read'|'edit'|'picker'|'schedule'|'shop'>(request.kind==='shop'?'shop':!original||request.edit?'edit':'read');
@@ -53,11 +55,11 @@ export default function MealDialogs({request,householdId,state,today,groceries,i
  function focusError(){requestAnimationFrame(()=>{errorAlert.current?.focus({preventScroll:true});errorAlert.current?.scrollIntoView({block:'start'})})}
  useEffect(()=>{if(error)focusError()},[error]);
  useEffect(()=>{
-  const overflow=document.body.style.overflow,opener=request.opener;document.body.style.overflow='hidden';mounted.current=true;
+  const opener=request.opener;mounted.current=true;
   if(view==='edit')titleInput.current?.focus();else modal.current?.querySelector<HTMLButtonElement>('.modal-close')?.focus();
   const keys=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();closeRequest.current()}if(event.key==='Tab'){const nodes=Array.from(modal.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href]')||[]).filter(node=>node.getClientRects().length>0&&!node.closest('[hidden]'));const first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(document.activeElement===first||!modal.current?.contains(document.activeElement))){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
   document.addEventListener('keydown',keys);
-  return()=>{mounted.current=false;document.body.style.overflow=overflow;document.removeEventListener('keydown',keys);requestAnimationFrame(()=>{if(document.querySelector('.meal-dialog'))return;const fallback=document.querySelector<HTMLElement>('.meal-planner h1,.week-overview h1,.today-meal button');const previous=opener?.isConnected&&opener.getClientRects().length?opener:fallback;if(previous&&!previous.closest('[inert]'))previous.focus()})};
+  return()=>{mounted.current=false;document.removeEventListener('keydown',keys);requestAnimationFrame(()=>{if(document.querySelector('.meal-dialog'))return;const fallback=document.querySelector<HTMLElement>('.meal-planner h1,.week-overview h1,.today-meal button');const previous=opener?.isConnected&&opener.getClientRects().length?opener:fallback;if(previous&&!previous.closest('[inert]'))previous.focus({preventScroll:true})})};
  },[]);
  useEffect(()=>{if(!dirty)return;const leave=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',leave);return()=>window.removeEventListener('beforeunload',leave)},[dirty]);
  useEffect(()=>{if(view==='edit')titleInput.current?.focus();else if(view==='schedule')dateInput.current?.focus()},[view]);

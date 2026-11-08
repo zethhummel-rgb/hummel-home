@@ -1,3 +1,4 @@
+import {useModalScrollLock} from './useUnsavedChanges';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,Check,FileText,NotebookPen,Pencil,Pin,Plus,Search,Trash2,X} from 'lucide-react';
 import {loadFamilyNote,NoteConflictError,sortFamilyNotes,type FamilyNote,type FamilyNoteDraft} from './familyNotesData';
@@ -40,17 +41,18 @@ export default function FamilyNotes({state,onOpen,onAdd,onBack}:CollectionProps&
 type DialogProps={householdId:string;note:FamilyNote|null;edit:boolean;state:NotesState;opener:HTMLElement|null;onClose:()=>void};
 type Conflict={latest:FamilyNote|null;loading:boolean;error:string};
 export function FamilyNoteDialog({householdId,note,edit,state,opener,onClose}:DialogProps){
+ useModalScrollLock();
  const [current,setCurrent]=useState(note),[editing,setEditing]=useState(edit),[title,setTitle]=useState(note?.title||''),[body,setBody]=useState(note?.body||''),[pinned,setPinned]=useState(note?.pinned||false);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[discard,setDiscard]=useState(false),[confirmDelete,setConfirmDelete]=useState(false),[conflict,setConflict]=useState<Conflict|null>(null);
  const modal=useRef<HTMLElement>(null),titleInput=useRef<HTMLInputElement>(null),pending=useRef(false),mounted=useRef(true),closeRequest=useRef<()=>void>(()=>{});
  const dirty=editing&&(title!==(current?.title||'')||body!==(current?.body||'')||pinned!==(current?.pinned||false));
  closeRequest.current=()=>{if(pending.current)return;if(discard){setDiscard(false);return}if(dirty){setDiscard(true);return}onClose()};
  useEffect(()=>{
-  const previous=opener,overflow=document.body.style.overflow;
-  document.body.style.overflow='hidden';mounted.current=true;
+  const previous=opener;
+  mounted.current=true;
   if(edit)titleInput.current?.focus();else modal.current?.querySelector<HTMLButtonElement>('.modal-close')?.focus();
   const keys=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();closeRequest.current()}if(event.key==='Tab'){const nodes=Array.from(modal.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),a[href]')||[]).filter(node=>node.getClientRects().length>0),first=nodes[0],last=nodes.at(-1);if(event.shiftKey&&(document.activeElement===first||!modal.current?.contains(document.activeElement))){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
-  document.addEventListener('keydown',keys);return()=>{mounted.current=false;document.removeEventListener('keydown',keys);document.body.style.overflow=overflow;requestAnimationFrame(()=>{if(document.querySelector('.family-note-dialog'))return;const target=previous?.isConnected?previous:document.querySelector<HTMLElement>('.family-notes-page h1,button[aria-label="Add family note"]');if(target&&!target.closest('[inert]'))target.focus()})};
+  document.addEventListener('keydown',keys);return()=>{mounted.current=false;document.removeEventListener('keydown',keys);requestAnimationFrame(()=>{if(document.querySelector('.family-note-dialog'))return;const target=previous?.isConnected?previous:document.querySelector<HTMLElement>('.family-notes-page h1,button[aria-label="Add family note"]');if(target&&!target.closest('[inert]'))target.focus({preventScroll:true})})};
  },[]);
  useEffect(()=>{if(editing)titleInput.current?.focus()},[editing]);
  useEffect(()=>{if(!dirty)return;const leave=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue=''};window.addEventListener('beforeunload',leave);return()=>window.removeEventListener('beforeunload',leave)},[dirty]);

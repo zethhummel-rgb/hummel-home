@@ -17,7 +17,7 @@ export default function GroceryEditor({householdId,item,stores,groceries,opener,
  useEffect(()=>{
   modal.current?.querySelector('input')?.focus();
   const key=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!pending.current)close.current();if(event.key==='Tab'){const fields=Array.from(modal.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)')||[]);if(event.shiftKey&&document.activeElement===fields[0]){event.preventDefault();fields.at(-1)?.focus()}else if(!event.shiftKey&&document.activeElement===fields.at(-1)){event.preventDefault();fields[0]?.focus()}}};
-  document.addEventListener('keydown',key);return()=>{document.removeEventListener('keydown',key);if(opener?.isConnected)opener.focus()};
+  document.addEventListener('keydown',key);return()=>{document.removeEventListener('keydown',key);if(opener?.isConnected)opener.focus({preventScroll:true})};
  },[opener]);
  async function save(allowDuplicate=false){
   if(pending.current)return;setError('');
