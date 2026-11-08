@@ -44,7 +44,8 @@ async function journey(cfg){const ctx=await browser.newContext({viewport:{width:
  const r=el.getBoundingClientRect(),heading=el.querySelector('.quick-form-heading h2'),footer=el.querySelector('.quick-form-footer'),button=footer.querySelector('button'),b=button.getBoundingClientRect();
  return {fits:el.scrollWidth<=el.clientWidth+1,heading:parseFloat(getComputedStyle(heading).fontSize),top:r.top,bottom:r.bottom,buttonBottom:b.bottom,buttonHeight:b.height,buttonWidth:b.width,footerWidth:footer.clientWidth,scrollLocked:document.body.style.overflow==='hidden'};
  });
- check(name+' compact heading and usable save',layout.fits&&layout.heading<=26&&layout.buttonHeight>=44&&layout.buttonWidth>=layout.footerWidth-2&&layout.buttonBottom<=layout.bottom+1&&layout.scrollLocked);
+ record.layout.at(-1).card=layout;
+ check(name+' compact heading and usable save '+JSON.stringify(layout),layout.fits&&layout.heading<=26&&layout.buttonHeight>=44&&layout.buttonWidth>=layout.footerWidth-2&&layout.buttonBottom<=layout.bottom+1&&layout.scrollLocked);
  check(name+' centered card with breathing room',layout.top>=19&&layout.bottom<=825&&Math.abs(layout.top-(844-layout.bottom))<=2);
  }
  async function nav(name){const scope=cfg.width>600?page.locator('.sidebar'):page.locator('.mobile-nav');await scope.getByRole('button',{name:new RegExp('^'+name+'(?:[0-9 ]*)$')}).click();}
