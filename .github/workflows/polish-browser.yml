@@ -39,7 +39,7 @@ jobs:
           node scripts/polish-browser/input-cards.cjs
           node scripts/polish-browser/scroll-lock.cjs
           node scripts/polish-browser/calendar-views.cjs
-          node scripts/polish-browser/journeys.cjs
+          node scripts/polish-browser/senior-audit.cjs
           node scripts/polish-browser/focused.cjs
           node scripts/polish-browser/signup.cjs
           node scripts/polish-browser/meals.cjs
