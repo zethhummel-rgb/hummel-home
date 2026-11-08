@@ -78,7 +78,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await page.keyboard.press('Escape');assert.equal(await panel.count(),0);assert.equal(await filter.evaluate(el=>el===document.activeElement),true);
  await filter.click();await panel.getByRole('button',{name:'Riley Morgan',exact:true}).click();assert.equal(await panel.count(),0);assert.match(await filter.getAttribute('class'),/has-filter/);assert.match(await filter.getAttribute('title'),/Riley/);
  await filter.click();assert.equal(await panel.getByRole('button',{name:'Riley Morgan',exact:true}).getAttribute('aria-pressed'),'true');await panel.getByRole('button',{name:'Everyone',exact:true}).click();assert.doesNotMatch(await filter.getAttribute('class'),/has-filter/);
- for(const width of [320,390]){await page.setViewportSize({width,height:844});await filter.click();const bounds=await panel.boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=width);await page.screenshot({path:path.join(out,'calendar-filter-'+width+'.png'),fullPage:true});await page.locator('.month-move h3').click();assert.equal(await panel.count(),0)}
+ for(const width of [320,390]){await page.setViewportSize({width,height:844});await filter.click();const bounds=await panel.boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=width);await page.screenshot({path:path.join(out,'calendar-filter-'+width+'.png'),fullPage:true});await page.locator('.native-calendar').click({position:{x:2,y:2}});assert.equal(await panel.count(),0)}
  pass('Compact action row replaces the title; filter opens on demand without a native picker, restores focus, marks selection, clears and fits narrow phones');
 
  const view=page.getByRole('group',{name:'Calendar view',exact:true});
