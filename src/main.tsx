@@ -18,6 +18,7 @@ import type {Member} from './data';
 import './style.css';
 import './polish.css';
 import './calendar-agenda.css';
+import './event-editor.css';
 import {backendConfigured,testEnvironment} from './config';
 import Setup from './Setup';
 import {initialAuthMode,invitationFrom,invitationRedirect,PILOT_INVITE_KEY,FAMILY_INVITE_KEY} from './pilot';
