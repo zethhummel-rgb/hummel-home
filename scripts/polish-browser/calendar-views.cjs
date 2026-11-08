@@ -36,7 +36,8 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  browser=await launchBrowser();
  const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto'});
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
- await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
+ // Keep loopback requests native across service-worker-controlled reloads; the server already serves every fixture.
+ await context.route(url=>url.hostname!=='127.0.0.1',route=>route.abort('blockedbyclient'));
  await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
  setFixtureHandler(async route=>{
    if(!serve){await route.abort('internetdisconnected');return;}
