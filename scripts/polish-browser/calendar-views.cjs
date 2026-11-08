@@ -34,7 +34,8 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
  browser=await launchBrowser();
- const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto'});
+ // This suite tests calendar preferences; service-worker/offline behaviour is covered by the full journeys and focused suite.
+ const context=await browser.newContext({viewport:{width:390,height:844},timezoneId:'America/Toronto',serviceWorkers:'block'});
  // Allow only the local static server. The specific API handler below fulfills every Supabase request from fixtures.
  // Keep loopback requests native across service-worker-controlled reloads; the server already serves every fixture.
  await context.route(url=>url.hostname!=='127.0.0.1',route=>route.abort('blockedbyclient'));
@@ -66,7 +67,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
 
 
  const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[];
- page.on('pageerror',e=>errors.push(e.message));
+ page.on('pageerror',e=>{errors.push(e.message);console.error('Calendar page error:',e.stack||e.message)});
  function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors},null,2));console.log('PASS '+name)}
  // Reminder date links intentionally open Calendar directly, not Home.
  await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.native-calendar').waitFor();
