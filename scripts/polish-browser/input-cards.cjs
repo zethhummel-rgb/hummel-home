@@ -98,7 +98,7 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
   await swipe();await confirm();await page.getByRole('button',{name:'Discard',exact:true}).click();await closed();assert.equal(writes,before);pass(c.name+': Keep editing/Escape preserve draft; Discard closes without saving');
   await c.open();await c.field().fill('   ');if(c.fill)await c.fill();
   await swipe();await confirm();await page.getByRole('button',{name:'Save',exact:true}).click();await page.waitForTimeout(150);assert.equal(await card().count(),1,'Invalid save keeps card');assert.equal(writes,before);
-  await c.field().fill('Saved by swipe '+c.name);await swipe();await confirm();await page.getByRole('button',{name:'Save',exact:true}).click();await closed();assert.equal(writes,before+1,'Save persists exactly once');pass(c.name+': invalid Save preserves form; valid Save writes once and closes');
+  await c.field().fill('Saved by swipe '+c.name);await swipe();await confirm();await page.getByRole('button',{name:'Save',exact:true}).click();await closed();for(let i=0;i<100&&writes<before+1;i++)await page.waitForTimeout(50);assert.equal(writes,before+1,'Save persists exactly once');pass(c.name+': invalid Save preserves form; valid Save writes once and closes');
  }
  // Failed server save retains the draft and the page lock.
  await more('Family notes');await page.getByRole('button',{name:'Add note',exact:true}).click();await page.getByLabel('Title',{exact:true}).fill('Retry note');await page.getByLabel('Note',{exact:true}).fill('Do not lose this.');
