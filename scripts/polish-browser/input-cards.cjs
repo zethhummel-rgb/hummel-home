@@ -110,6 +110,8 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
  for(const viewport of [{width:320,height:520},{width:390,height:844},{width:1280,height:900}]){
   await page.setViewportSize(viewport);await centered();await card().evaluate(el=>el.scrollTop=el.scrollHeight);assert(await card().evaluate(el=>el.scrollTop)>0);const footer=await page.locator('.quick-form-footer button').boundingBox();assert(footer.y>=0&&footer.y+footer.height<=viewport.height-19);await page.screenshot({path:path.join(out,'long-card-'+viewport.width+'.png')});
  }
+ await page.setViewportSize({width:390,height:844});await page.locator('.quick-form-backdrop').evaluate(el=>{el.style.setProperty('--input-card-gap-top','44px');el.style.setProperty('--input-card-gap-bottom','34px')});
+ const safe=await card().boundingBox();assert(safe.y>=44&&safe.y+safe.height<=810,'Long cards respect phone safe areas');assert(Math.abs((safe.y-44)-(810-safe.y-safe.height))<=2,'Centered within usable phone area');
  await swipe();await confirm();await page.getByRole('button',{name:'Discard',exact:true}).click();await closed();pass('Long cards stay centered and scroll internally at short phone, phone and desktop sizes');
  assert.deepEqual(errors,[]);pass('No runtime errors');
 })().catch(async e=>{console.error(e);if(page){fs.writeFileSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','input-cards-failure.txt'),await page.locator('body').innerText().catch(()=>''));await page.screenshot({path:path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','input-cards-failure.png')}).catch(()=>{})}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()});

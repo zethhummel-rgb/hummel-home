@@ -1,18 +1,18 @@
 /* Shared compact editors. Colours follow the household palette. */
-.quick-form-backdrop,.input-card-backdrop{align-items:center;justify-content:center;padding:20px;overflow:hidden}
-.modal.quick-form{width:100%;max-width:520px;max-height:calc(100dvh - 40px);min-width:0;padding:18px 20px 12px;border-radius:22px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:auto;scroll-padding-block:16px 84px}
+.quick-form-backdrop,.input-card-backdrop{--input-card-gap-top:max(20px,env(safe-area-inset-top));--input-card-gap-bottom:max(20px,env(safe-area-inset-bottom));align-items:center;justify-content:center;padding:var(--input-card-gap-top) 20px var(--input-card-gap-bottom);overflow:hidden}
+.modal.quick-form{width:100%;max-width:520px;max-height:calc(100dvh - var(--input-card-gap-top) - var(--input-card-gap-bottom));min-width:0;padding:18px 20px 12px;border-radius:22px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:auto;scroll-padding-block:16px 84px}
 .input-card-handle{display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:center;width:100%;min-height:44px;height:44px;margin:-10px auto 0;padding:0;touch-action:none;user-select:none;cursor:grab}
 .input-card-handle:active{cursor:grabbing}
 .input-card-handle>span{display:block;width:34px;height:4px;border-radius:3px;background:var(--theme-line-strong,var(--line));pointer-events:none}
 .compact-event-modal>.input-card-handle{margin:0;height:44px;min-height:44px}
-.input-card-backdrop>.compact-event-modal{max-height:calc(100dvh - 40px)}
+.input-card-backdrop>.compact-event-modal{max-height:calc(100dvh - var(--input-card-gap-top) - var(--input-card-gap-bottom))}
 .quick-form-heading{position:relative;display:flex;align-items:center;min-height:44px;margin-bottom:14px;padding-right:48px}
 .modal.quick-form .quick-form-heading h2{font:400 25px/1.25 Georgia,serif;letter-spacing:-.4px;margin:0;padding:0;overflow-wrap:anywhere}
 .modal.quick-form .quick-form-heading .modal-close{top:0;right:-6px;width:44px;height:44px;min-width:44px;min-height:44px}
 .quick-form form,.quick-form fieldset{min-width:0;margin:0}
 .quick-form label{min-width:0;font-size:13px;line-height:1.4;gap:6px;margin:0 0 12px}
 .quick-form input:not([type=checkbox]),.quick-form select,.quick-form textarea{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;min-height:44px;padding:10px 11px;margin:0;border:1px solid var(--theme-line-strong,var(--line));border-radius:10px;background:var(--theme-field,var(--bg));color:var(--ink);font:16px/1.4 Arial,sans-serif}
-.quick-form select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-form select{appearance:none;-webkit-appearance:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) center,calc(100% - 10px) center;background-size:5px 5px;background-repeat:no-repeat}
 .quick-form input[type=date],.quick-form input[type=time]{appearance:none;-webkit-appearance:none}
 .quick-form input::-webkit-date-and-time-value{text-align:left;min-width:0}
 .quick-form textarea{resize:vertical;min-height:76px}
@@ -53,8 +53,8 @@
 .quick-form .grocery-reuse{flex-direction:row;align-items:center;min-height:44px;font-size:13px}
 .quick-form .grocery-reuse input{width:20px;height:20px;flex-shrink:0}
 @media(max-width:600px){
- .quick-form-backdrop,.input-card-backdrop{align-items:center;padding:20px 12px}
- .modal.quick-form{max-width:520px;width:100%;max-height:calc(100dvh - 40px);padding:8px 18px 0;border-radius:22px}
+ .quick-form-backdrop,.input-card-backdrop{align-items:center;padding:var(--input-card-gap-top) 12px var(--input-card-gap-bottom)}
+ .modal.quick-form{max-width:520px;width:100%;max-height:calc(100dvh - var(--input-card-gap-top) - var(--input-card-gap-bottom));padding:8px 18px 0;border-radius:22px}
  .input-card-handle{margin:-8px auto 0}
  .quick-form-heading{margin-bottom:12px}
  .quick-form-footer{bottom:0;padding:10px 0 max(14px,env(safe-area-inset-bottom))}
