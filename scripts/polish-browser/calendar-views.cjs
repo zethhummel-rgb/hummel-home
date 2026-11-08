@@ -67,8 +67,8 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish'),checks=[],errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'calendar-views.json'),JSON.stringify({checks,errors},null,2));console.log('PASS '+name)}
- await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.home-family-name').first().waitFor();
- await page.locator('.mobile-nav').getByRole('button',{name:'Calendar',exact:true}).click();
+ // Reminder date links intentionally open Calendar directly, not Home.
+ await page.goto(url+'?reminder_date=2026-11-30');await page.locator('.native-calendar').waitFor();
  const view=page.getByRole('group',{name:'Calendar view',exact:true});
  assert.deepEqual(await view.getByRole('button').allTextContents(),['Agenda','3 Day','Month']);
  assert.equal(await view.getByRole('button',{name:'Agenda',exact:true}).getAttribute('aria-pressed'),'true');
