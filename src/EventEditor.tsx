@@ -1,3 +1,4 @@
+import InputCardHandle,{submitInputCard} from './InputCardHandle';
 import {useUnsavedChanges,useModalScrollLock} from './useUnsavedChanges';
 import {reminderLabel} from '../supabase/functions/google-calendar/reminders';
 import {selectedPeople,personLabel,isUnassigned,type PersonProfile} from './people';
@@ -55,9 +56,9 @@ export default function EventEditor({event,date,profiles,connected,onClose,onSav
  }
  const repeatEnabled=frequency!=='none'&&frequency!=='existing';
  const changeLabel=wholeSeries?'the whole series':event?.recurring?'this occurrence':'this event';
- return <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget&&!busy)guard.requestClose()}}>
+ return <div className="modal-backdrop input-card-backdrop" onClick={e=>{if(e.target===e.currentTarget&&!busy)guard.requestClose()}}>
   <section className="modal event-modal compact-event-modal" role="dialog" aria-modal="true" aria-labelledby="event-editor-title" ref={modal}>
-   <header className="event-editor-header"><button type="button" className="event-cancel" aria-label="Close event editor" disabled={busy} onClick={()=>guard.requestClose()}>Cancel</button><h2 id="event-editor-title">{event?'Edit event':'New event'}</h2><div className="event-save-bar"><button type="submit" form={formId} className="button primary" aria-label={wholeSeries?'Save whole series':event?'Save changes':'Add event'} disabled={busy||!title.trim()}>{busy?'Saving…':'Save'}</button></div></header>
+   <InputCardHandle modal={modal} dirty={snapshot!==baseline.current} busy={busy} onClose={onClose} onSave={()=>submitInputCard(modal.current)}/><header className="event-editor-header"><button type="button" className="event-cancel" aria-label="Close event editor" disabled={busy} onClick={()=>guard.requestClose()}>Cancel</button><h2 id="event-editor-title">{event?'Edit event':'New event'}</h2><div className="event-save-bar"><button type="submit" form={formId} className="button primary" aria-label={wholeSeries?'Save whole series':event?'Save changes':'Add event'} disabled={busy||!title.trim()}>{busy?'Saving…':'Save'}</button></div></header>
    <div className="event-editor-body">
     {error&&<div className="error" role="alert" ref={errorTarget} tabIndex={-1}>{error}</div>}
     {connected&&<p className="event-context-note">Your Google calendar stays active until its HH transfer is verified.</p>}
