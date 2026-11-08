@@ -1,3 +1,4 @@
+import InputCardHandle,{submitInputCard} from './InputCardHandle';
 import {useUnsavedChanges,useModalScrollLock} from './useUnsavedChanges';
 import QuantityFields from './QuantityFields';
 import ChoiceDialog from './ChoiceDialog';
@@ -33,7 +34,7 @@ export default function GroceryEditor({householdId,item,stores,groceries,opener,
 
 
  return <div className="modal-backdrop quick-form-backdrop" onClick={event=>{if(event.target===event.currentTarget&&!busy)guard.requestClose()}}><section className="modal grocery-editor quick-form" role="dialog" aria-modal="true" aria-labelledby="grocery-editor-title" ref={modal}>
-  <div className="quick-form-handle" aria-hidden="true"/><header className="quick-form-heading"><button type="button" className="modal-close icon-button" aria-label="Close grocery editor" disabled={busy} onClick={()=>guard.requestClose()}><X/></button><h2 id="grocery-editor-title">{item?'Edit grocery item':'Add grocery item'}</h2></header>
+  <InputCardHandle modal={modal} dirty={snapshot!==baseline.current} busy={busy} onClose={onClose} onSave={()=>submitInputCard(modal.current)}/><header className="quick-form-heading"><button type="button" className="modal-close icon-button" aria-label="Close grocery editor" disabled={busy} onClick={()=>guard.requestClose()}><X/></button><h2 id="grocery-editor-title">{item?'Edit grocery item':'Add grocery item'}</h2></header>
   <form onSubmit={submit}><fieldset disabled={busy} className="grocery-fields">
    <label>Item<input required maxLength={160} value={title} onChange={event=>setTitle(event.target.value)} placeholder="e.g. Kidney beans"/></label>
    <QuantityFields quantity={quantity} unit={unit} onQuantity={value=>{setQuantity(value);if(!value)setUnit('')}} onUnit={setUnit}/>
