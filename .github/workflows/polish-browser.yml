@@ -37,6 +37,7 @@ jobs:
       - run: node scripts/check-invitation-reissue.mjs
       - name: Run all 36 configurations and focused checks
         run: |
+          node scripts/polish-browser/interactive-tutorials.cjs
           node scripts/polish-browser/selected-usability.cjs
           node scripts/polish-browser/input-cards.cjs
           node scripts/polish-browser/scroll-lock.cjs

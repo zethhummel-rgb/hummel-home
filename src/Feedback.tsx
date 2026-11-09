@@ -1,3 +1,4 @@
+import {useTutorialPractice} from './InteractiveTutorial';
 import {useRegisteredDraft} from './draftGroup';
 import {useEffect,useRef,useState} from 'react';
 import {CheckCircle2,MessageSquare,Send} from 'lucide-react';
@@ -6,6 +7,7 @@ import {feedbackAvailability,sendFeedback} from './feedbackData';
 import './feedback.css';
 
 export default function Feedback({userId,householdId,email,onBusy,onDirty}:{userId:string;householdId:string;email:string;onBusy:(busy:boolean)=>void;onDirty:(dirty:boolean)=>void}){
+ const tutorial=useTutorialPractice();
  const [area,setArea]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[sent,setSent]=useState(false),[error,setError]=useState('');
  useEffect(()=>{onDirty(!!(area||message.trim())&&!sent)},[area,message,sent,onDirty]);
  const inFlight=useRef(false),request=useRef<{content:string;id:string}|null>(null);
@@ -13,6 +15,7 @@ export default function Feedback({userId,householdId,email,onBusy,onDirty}:{user
  useEffect(()=>{let active=true;void feedbackAvailability().then(value=>{if(active)setAvailable(value)});return()=>{active=false}},[]);
  useRegisteredDraft({dirty:!!(area||message.trim())&&!sent,busy,save,discard:()=>{setArea('');setMessage('');setError('')}});
  async function save(){
+  if(tutorial.intercept('feedback'))return false;
   if(inFlight.current||available===false)return false;
   if(!area||!message.trim()){setError('Choose an area and write a comment before sending.');return false}
   const content=JSON.stringify({area,message:message.trim()});
