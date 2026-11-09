@@ -34,8 +34,10 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
       - run: npx --no-install playwright install --with-deps ${{ matrix.engine }}
       - run: npm run build
+      - run: node scripts/check-invitation-reissue.mjs
       - name: Run all 36 configurations and focused checks
         run: |
+          node scripts/polish-browser/selected-usability.cjs
           node scripts/polish-browser/input-cards.cjs
           node scripts/polish-browser/scroll-lock.cjs
           node scripts/polish-browser/calendar-views.cjs
@@ -51,3 +53,4 @@ jobs:
           name: test-browser-results-${{ matrix.engine }}
           path: artifacts/full-audit
           retention-days: 14
+
