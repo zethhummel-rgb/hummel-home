@@ -1,3 +1,4 @@
+import {useTutorialPractice} from './InteractiveTutorial';
 import InvitationDelivery from './InvitationDelivery';
 import ChoiceDialog from './ChoiceDialog';
 import {useRegisteredDraft} from './draftGroup';
@@ -11,6 +12,7 @@ import type {Member,HouseholdPerson} from './data';
 import {Mail,Users,ChevronRight,X} from 'lucide-react';
 type Invite={id:string;email:string;expires_at:string;used_at:string|null};
 export default function FamilySettings({owner,members,householdId,householdName,people,onHouseholdSaved}:{householdName:string;people:HouseholdPerson[];onHouseholdSaved:()=>unknown;owner:boolean;members:Member[];householdId:string}){
+ const tutorial=useTutorialPractice();
  const [inviteOpen,setInviteOpen]=useState(false),[addProfileRequest,setAddProfileRequest]=useState(0),[correcting,setCorrecting]=useState<Invite|null>(null);
  const emailInput=useRef<HTMLInputElement>(null),invitePanelId=useId(),pending=useRef(false),attempt=useRef<ReissueAttempt|null>(null);
  const [email,setEmail]=useState(''),[delivery,setDelivery]=useState<EmailInvitation|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[invites,setInvites]=useState<Invite[]>([]),[notice,setNotice]=useState('');
@@ -28,6 +30,7 @@ export default function FamilySettings({owner,members,householdId,householdName,
  }
  function edit(source:Invite|null){guard.requestClose(()=>{setCorrecting(source);setEmail(source?.email||'');setInviteOpen(true);setError('');setNotice('')})}
  async function send(){
+  if(tutorial.intercept('invitation'))return;
   if(pending.current||!review)return;pending.current=true;setBusy(true);setError('');setNotice('');const selected=review;setReview(null);
   try{
    let result:EmailInvitation;
@@ -72,7 +75,7 @@ export default function FamilySettings({owner,members,householdId,householdName,
  {owner?<HouseholdProfiles addRequest={addProfileRequest} people={people} members={members} householdId={householdId} onSaved={onHouseholdSaved}/>:<section className="household-profiles"><h4>Children &amp; members without email</h4>{people.length?people.map(p=><div className="profile-row" key={p.id}><i className="person-dot" style={{backgroundColor:p.calendar_color}}/><span>{p.display_name}<small>{p.linked_user_id?'Linked to a family account':'No login needed'}</small></span></div>):<p>No profiles have been added yet.</p>}</section>}
  </section>
  {error&&<div role="alert" className="error">{error}</div>}{notice&&<p role="status" className="field-help">{notice}</p>}
- {review&&<ChoiceDialog title="Review invitation" onCancel={()=>setReview(null)} actions={[{label:review.source?'Send new invitation':'Send invitation',primary:true,run:()=>void send()},{label:'Keep editing',run:()=>setReview(null)}]}>
+ {review&&<ChoiceDialog title="Review invitation" onCancel={()=>setReview(null)} actions={[{label:review.source?'Send new invitation':'Send invitation',tutorial:'invitation-send',primary:true,run:()=>void send()},{label:'Keep editing',run:()=>setReview(null)}]}>
  <p>Invite this person to <strong>{householdName}</strong>:</p><p className="invitation-recipient">{review.email}</p>{review.source&&<p>This creates a fresh seven-day invitation. The previous invitation link will stop working.</p>}<p>Check the address before sending.</p></ChoiceDialog>}
  {cancelling&&<ChoiceDialog title="Cancel invitation?" onCancel={()=>setCancelling(null)} actions={[{label:'Keep invitation',primary:true,run:()=>setCancelling(null)},{label:'Cancel invitation',run:()=>void cancel()}]}><p>Cancel the invitation for <strong>{cancelling.email}</strong>? Its link will stop working.</p></ChoiceDialog>}
  </div>;
@@ -82,9 +85,9 @@ export default function FamilySettings({owner,members,householdId,householdName,
 export function MyCalendarColor({member,householdId,userId,onSaved}:{member:Member|undefined;householdId:string;userId:string;onSaved:(color:string)=>void}){
  const saved=safeColor(member?.calendar_color)||defaultColor(member?.display_name||'',userId);
  const [color,setColor]=useState(saved),[saving,setSaving]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
- const colorPending=useRef(false);
+ const colorPending=useRef(false),tutorial=useTutorialPractice();
  useRegisteredDraft({dirty:color.toUpperCase()!==saved.toUpperCase(),busy:saving,save:saveColor,discard:()=>{setColor(saved);setError('')}});
- async function saveColor(){if(colorPending.current)return false;colorPending.current=true;setSaving(true);setError('');setMessage('');try{const r=await supabase.from('household_members').update({calendar_color:color}).eq('household_id',householdId).eq('user_id',userId).select('calendar_color').single();if(r.error)throw r.error;onSaved(r.data.calendar_color);setMessage('Your colour is saved.');return true}catch(e){setError((e as {message?:string}).message||'Could not save your colour.');return false}finally{colorPending.current=false;setSaving(false)}}
+ async function saveColor(){if(tutorial.intercept('colour'))return false;if(colorPending.current)return false;colorPending.current=true;setSaving(true);setError('');setMessage('');try{const r=await supabase.from('household_members').update({calendar_color:color}).eq('household_id',householdId).eq('user_id',userId).select('calendar_color').single();if(r.error)throw r.error;onSaved(r.data.calendar_color);setMessage('Your colour is saved.');return true}catch(e){setError((e as {message?:string}).message||'Could not save your colour.');return false}finally{colorPending.current=false;setSaving(false)}}
  useEffect(()=>{setColor(saved)},[saved]);
  return <section className="my-calendar-color"><h3>Your calendar colour</h3><p>Pick the dot the family will see beside your events.</p><div className="color-swatches" role="group" aria-label="Calendar colour choices">{COLOR_CHOICES.map(choice=><button type="button" key={choice.value} disabled={saving} aria-label={choice.name} aria-pressed={color.toUpperCase()===choice.value} title={choice.name} style={{backgroundColor:choice.value}} onClick={()=>{setColor(choice.value);setMessage('')}}/>)}</div><label className="custom-color">Custom colour<input type="color" disabled={saving} aria-label="Custom calendar colour" value={color} onChange={e=>{setColor(e.target.value.toUpperCase());setMessage('')}}/></label><button type="button" className="button soft" disabled={saving||color.toUpperCase()===saved.toUpperCase()} onClick={()=>void saveColor()}>{saving?'Saving…':'Save my colour'}</button>{message&&<p role="status">{message}</p>}{error&&<p className="error" role="alert">{error}</p>}</section>
 }
