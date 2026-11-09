@@ -76,20 +76,25 @@ function TutorialCoach({guide,step,session,acted,notice,onStart,onNext,onBack,on
   let frame=0,alive=true;setTarget(null);setResolving(true);const missingTimer=setTimeout(()=>setResolving(false),600);
   const update=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
    if(!alive)return;const el=session.started&&!session.complete?findTutorialTarget(step.target):null;setTarget(old=>old===el?old:el);if(el)setResolving(false);setDisabled(!!el?.matches(':disabled'));
-   const vv=window.visualViewport,vx=vv?.offsetLeft||0,vy=vv?.offsetTop||0,vw=vv?.width||innerWidth,vh=vv?.height||innerHeight;
-   const rect=el?.getBoundingClientRect(),width=Math.min(356,vw-24),height=Math.min(panel.current?.scrollHeight||220,Math.max(112,Math.min(280,vh*.44)));
-   const x=Math.max(vx+4,rect?.left||0),y=Math.max(vy+4,rect?.top||0),w=Math.max(0,Math.min(rect?.right||0,vx+vw-4)-x),h=Math.max(0,Math.min(rect?.bottom||0,vy+vh-4)-y);
+   // Size the coach from viewport limits, not its changing scrollHeight: otherwise
+   // resizing a scrollable coach can feed back into its placement indefinitely.
+   const vv=window.visualViewport,vx=Math.max(0,vv?.offsetLeft||0),vy=Math.max(0,vv?.offsetTop||0);
+   const right=Math.min(innerWidth,vx+(vv?.width||innerWidth)),bottom=Math.min(innerHeight,vy+(vv?.height||innerHeight));
+   const vw=Math.max(1,right-vx),vh=Math.max(1,bottom-vy);
+   const rect=el?.getBoundingClientRect(),width=Math.max(1,Math.min(356,vw-24)),height=Math.max(1,Math.min(280,vh*.44,vh-24));
+   const x=Math.max(vx+4,rect?.left||0),y=Math.max(vy+4,rect?.top||0),w=Math.max(0,Math.min(rect?.right||0,right-4)-x),h=Math.max(0,Math.min(rect?.bottom||0,bottom-4)-y);
    const below=y+h+14,above=y-height-14;
-   const top=rect?(below+height<=vy+vh-12?below:above>=vy+12?above:vy+vh-height-12):vy+Math.max(12,(vh-height)/2);
-   const next={left:vx+Math.max(12,(vw-width)/2),top,width,height,x,y,w,h};setLayout(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);
+   const proposedTop=rect?(below+height<=bottom-12?below:above>=vy+12?above:bottom-height-12):vy+Math.max(12,(vh-height)/2);
+   const top=Math.max(vy+4,Math.min(proposedTop,bottom-height-4));
+   const left=Math.max(vx+4,Math.min(vx+Math.max(12,(vw-width)/2),right-width-4));
+   const next={left,top,width,height,x,y,w,h};setLayout(old=>JSON.stringify(old)===JSON.stringify(next)?old:next);
    const stepId=guide.id+':'+session.index+':'+session.started;
    if(el&&lastStep.current!==stepId){lastStep.current=stepId;el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});schedule()}
   })};
   const schedule=()=>update();
   const observer=new MutationObserver(schedule);observer.observe(document.body,{childList:true,subtree:true,attributes:true});
-  const resize=new ResizeObserver(schedule);if(panel.current)resize.observe(panel.current);
   window.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);window.visualViewport?.addEventListener('resize',schedule);window.visualViewport?.addEventListener('scroll',schedule);schedule();
-  return()=>{alive=false;clearTimeout(missingTimer);cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();window.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('scroll',schedule)};
+  return()=>{alive=false;clearTimeout(missingTimer);cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('scroll',schedule)};
  },[guide.id,session.index,session.started,session.complete,step.target]);
  useEffect(()=>{if(!target)return;const previous=target.getAttribute('aria-describedby');target.setAttribute('aria-describedby',`${previous||''} ${id}-copy`.trim());target.setAttribute('data-tutorial-highlight','true');return()=>{if(previous===null)target.removeAttribute('aria-describedby');else target.setAttribute('aria-describedby',previous);target.removeAttribute('data-tutorial-highlight')}},[target,id]);
  useEffect(()=>{const modal=target?.closest<HTMLElement>('[role="dialog"],[role="alertdialog"]');if(modal&&!dialogs.current.has(modal)){dialogs.current.set(modal,modal.getAttribute('aria-modal'));modal.setAttribute('aria-modal','false')}},[target]);
