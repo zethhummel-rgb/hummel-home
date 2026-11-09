@@ -100,7 +100,13 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
   for(let index=0;index<guide.steps.length;index++){
    await page.waitForFunction(({number,total})=>document.querySelector('.tutorial-counter')?.textContent===`Step ${number} of ${total}`,{number:index+1,total:guide.steps.length});
    const step=guide.steps[index];await target(step.target);await page.waitForFunction(selector=>Array.from(document.querySelectorAll(selector)).some(el=>el.hasAttribute('data-tutorial-highlight')),step.target);if(step.action!=='read'&&step.action!=='save')assert(await page.locator('.tutorial-coach-actions .button').isDisabled(),'Cannot advance before interacting: '+guide.id+' '+index);
-   const box=await page.locator('.tutorial-coach').boundingBox(),vp=page.viewportSize();assert(box.x>=0&&box.y>=0&&box.x+box.width<=vp.width+1&&box.y+box.height<=vp.height+1,'Coach stays inside viewport');await act(step,guide,index);
+   // Highlight and coach positioning settle on successive animation frames.
+   await page.waitForFunction(()=>{
+    const coach=document.querySelector('.tutorial-coach');if(!coach)return false;
+    const box=coach.getBoundingClientRect();
+    return box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1;
+   },null,{timeout:3000});
+   const box=await page.locator('.tutorial-coach').boundingBox(),vp=page.viewportSize();assert(box.x>=0&&box.y>=0&&box.x+box.width<=vp.width+1&&box.y+box.height<=vp.height+1,'Coach stays inside viewport: '+guide.id+' step '+index+' '+JSON.stringify({box,vp}));await act(step,guide,index);
    assert.equal(mutations.length,0,'Practice must never mutate the server: '+JSON.stringify(mutations));
   }
   await page.getByRole('heading',{name:'You did it.',exact:true}).waitFor();
