@@ -1,5 +1,6 @@
+import {DraftScope,useDraftGroup} from './draftGroup';
 import ProfileName from './ProfileName';
-import {useUnsavedChanges} from './useUnsavedChanges';
+import {useUnsavedChanges,useModalScrollLock} from './useUnsavedChanges';
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {Bell,BookOpen,CalendarDays,Check,ChevronLeft,ChevronRight,House,LogOut,MailPlus,MessageSquare,Palette,UserRound,Users} from 'lucide-react';
 import type {Member,HouseholdPerson} from './data';
@@ -31,13 +32,15 @@ type Props={
 function Row({icon,title,detail,onClick}:{icon:ReactNode;title:string;detail?:string;onClick:()=>void}){
  return <button type="button" className="settings-row" onClick={onClick}><span className="settings-row-icon" aria-hidden="true">{icon}</span><span className="settings-row-copy"><b>{title}</b>{detail&&<small>{detail}</small>}</span><ChevronRight size={17} aria-hidden="true"/></button>;
 }
-export default function SettingsDialog(props:Props){
+export default function SettingsDialog(props:Props){return <DraftScope><SettingsDialogBody {...props}/></DraftScope>}
+function SettingsDialogBody(props:Props){
+ const drafts=useDraftGroup()!;useModalScrollLock();
  const {initialPage='main',importError,onCalendarImported,initialGuide,onGettingStarted,name,email,userId,householdId,householdName,owner,members,people,paletteId,paletteMessage,onPaletteChange,onColorSaved,onHouseholdSaved,calendarConnected,calendarLegacy,calendarTransition=false,calendarCopyMessage,calendarConfigured,onOpenCalendar,onConnectGoogle,onWelcome,onClose,onSignOut}=props;
  const [history,setHistory]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[visited,setVisited]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[host,setHost]=useState(false),[leaving,setLeaving]=useState(false),[error,setError]=useState('');
  const [profileDirty,setProfileDirty]=useState(false);
  const [feedbackDirty,setFeedbackDirty]=useState(false),[draftRevision,setDraftRevision]=useState(0);
- const guard=useUnsavedChanges(feedbackDirty||profileDirty,leaving,onClose);
- const clearDrafts=useCallback(()=>{if(!feedbackDirty&&!profileDirty)return;setFeedbackDirty(false);setProfileDirty(false);setDraftRevision(v=>v+1)},[feedbackDirty,profileDirty]);
+ const guard=useUnsavedChanges(feedbackDirty||profileDirty||drafts.dirty,leaving||drafts.busy,onClose,drafts.saveAll);
+ const clearDrafts=useCallback(()=>{drafts.discardAll();setFeedbackDirty(false);setProfileDirty(false);setDraftRevision(v=>v+1)},[feedbackDirty,profileDirty,drafts.discardAll]);
  const closeSettings=()=>guard.requestClose(()=>{clearDrafts();onClose()});
  const page=history.at(-1)!,dialog=useRef<HTMLElement>(null),heading=useRef<HTMLHeadingElement>(null),content=useRef<HTMLDivElement>(null);
  const pageRef=useRef(page),closeRef=useRef(onClose),leavingRef=useRef(leaving);pageRef.current=page;closeRef.current=closeSettings;leavingRef.current=leaving;
@@ -46,13 +49,12 @@ export default function SettingsDialog(props:Props){
  const peopleCount=members.length+people.filter(p=>!p.linked_user_id).length;
  const canSwitchAccounts=accountSwitchEligible(email);
  const [pairedAccount,setPairedAccount]=useState(()=>canSwitchAccounts&&hasSavedSwitchAccount(userId,email));
- function open(next:Page){if(leaving)return;setVisited(old=>old.includes(next)?old:[...old,next]);setHistory(old=>old.at(-1)===next?old:[...old,next])}
+ function open(next:Page){if(leaving||drafts.busy)return;guard.requestClose(()=>{clearDrafts();setVisited(old=>old.includes(next)?old:[...old,next]);setHistory(old=>old.at(-1)===next?old:[...old,next])})}
  function back(){guard.requestClose(()=>{clearDrafts();setHistory(old=>old.length>1?old.slice(0,-1):old)})}
  const backRef=useRef(back);backRef.current=back;
  useEffect(()=>{let active=true;supabase.rpc('pilot_status').then(({data})=>{if(active)setHost(!!data?.is_host)});return()=>{active=false}},[]);
  useEffect(()=>{
-  const previous=document.activeElement instanceof HTMLElement?document.activeElement:null,overflow=document.body.style.overflow;
-  document.body.style.overflow='hidden';
+  const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
   const keys=(e:KeyboardEvent)=>{
    if(e.key==='Escape'){e.preventDefault();if(leavingRef.current)return;if(pageRef.current==='main')closeRef.current();else backRef.current();return}
    if(e.key!=='Tab')return;
@@ -62,7 +64,7 @@ export default function SettingsDialog(props:Props){
    else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===heading.current)){e.preventDefault();first?.focus()}
   };
   document.addEventListener('keydown',keys);
-  return()=>{document.removeEventListener('keydown',keys);document.body.style.overflow=overflow;if(previous?.isConnected)previous.focus()};
+  return()=>{document.removeEventListener('keydown',keys);if(previous?.isConnected)previous.focus({preventScroll:true})};
  },[]);
  useEffect(()=>{content.current?.scrollTo({top:0});heading.current?.focus();if(page==='help'&&initialGuide==='install'){const timer=setTimeout(()=>content.current?.querySelector('[data-install-guide]')?.scrollIntoView({block:'start'}),0);return()=>clearTimeout(timer)}},[page,initialGuide]);
  const screen=(id:Page,children:ReactNode)=>visited.includes(id)?<div key={id+draftRevision} className={'settings-page settings-page-'+id} hidden={page!==id} inert={page!==id}>{children}</div>:null;
