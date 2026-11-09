@@ -35,7 +35,7 @@ export function InteractiveTutorialProvider({userId,householdId,children}:{userI
  const stop=useCallback(()=>{reset.current();setSession(null);setExitRequested(false);setActed(false);setNotice('')},[]);
  const advance=useCallback(()=>{const current=latest.current.session;if(!current)return;const g=tutorialGuides.find(g=>g.id===current.id)!;if(current.index===g.steps.length-1){markComplete();return}setActed(false);setNotice('');setSession({...current,index:current.index+1})},[markComplete]);
  useEffect(()=>{setActed(false);setNotice('')},[session?.id,session?.index]);
- useEffect(()=>{
+ useLayoutEffect(()=>{
   if(!session)return;
   document.documentElement.classList.add('tutorial-practice-active');
   const fieldOK=(target:HTMLElement)=>{if(target instanceof HTMLInputElement||target instanceof HTMLSelectElement||target instanceof HTMLTextAreaElement)return target.checkValidity()&&(target instanceof HTMLInputElement&&target.type==='checkbox'||target.value.trim().length>0);return true};
@@ -52,7 +52,7 @@ export function InteractiveTutorialProvider({userId,householdId,children}:{userI
    // Labels also dispatch a click to their input. Advance only once per step.
    if(!target.matches('input,select,textarea')){const index=session.index,id=session.id;requestAnimationFrame(()=>{if(latest.current.session?.index===index&&latest.current.session.id===id)advance()})}
   };
-  const change=(e:Event)=>{if(!step||!session.started||session.complete)return;const target=findTutorialTarget(step.target);if(target&&(target===e.target||target.contains(e.target as Node))&&(['input','change'].includes(step.action)||step.action==='click'&&target.matches('input,select,textarea'))){setActed(fieldOK(target));setNotice('')}};
+  const change=(e:Event)=>{if(!step||!session.started||session.complete)return;const target=findTutorialTarget(step.target);if(target&&(target===e.target||target.contains(e.target as Node))&&(['input','change'].includes(step.action)||step.action==='click'&&target.matches('input,select,textarea'))){const currentId=session.id,currentIndex=session.index;queueMicrotask(()=>{if(latest.current.session?.id!==currentId||latest.current.session?.index!==currentIndex)return;setActed(fieldOK(target));setNotice('')})}};
   const submit=(e:Event)=>{const control=step?findTutorialTarget(step.target):null;const form=control instanceof HTMLButtonElement?control.form:null;const review=step?.action==='click'&&!!control?.closest('.email-invitation-form');if(exitRequested||session.complete||!session.started||e.target!==form||(step?.action!=='save'&&!review)){e.preventDefault();e.stopImmediatePropagation();setNotice('Finish the highlighted step before trying Save.')}};
   const keys=(e:KeyboardEvent)=>{
    if(exitRequested)return;
