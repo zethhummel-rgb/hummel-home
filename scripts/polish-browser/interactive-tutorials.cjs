@@ -152,7 +152,7 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
  }
 
  // Safari controls live outside the DOM: practise both example layouts without claiming installation.
- await openHelp();const safari=page.getByRole('region',{name:'Safari Home Screen tutorial',exact:true});
+ await openHelp();const safari=page.getByRole('region',{name:'Safari Home Screen tutorial',exact:true});assert.equal(await safari.count(),1,'Show a single Safari lesson');
  for(const width of [320,390,1280])for(const compact of [true,false]){
   await page.setViewportSize({width,height:568});await safari.getByRole('button',{name:'Add the HH icon to your iPhone'}).click();
   await safari.getByLabel(compact?'A three-dot (…) menu':'The Share arrow is visible').check();
