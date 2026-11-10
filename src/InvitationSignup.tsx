@@ -38,7 +38,6 @@ export default function InvitationSignup({family,pilot,onInvitation,onSignIn,onA
   }catch(e){setError((e as Error).message||'Could not continue. Please try again.')}finally{pending.current=false;setBusy(false)}
  }
  return <><span className="round-icon sage"><Heart/></span><h2>Accept your invitation.</h2>
-  <p>{(token?kind:manualKind)==='family'?'Join your family’s private home.':'Create your own private household.'} Your invitation verifies your email—no second confirmation email.</p>
   <form onSubmit={submit}>
    {!token&&<div className="setup-note"><b>HH is invitation-only during the pilot.</b><p>Open the invitation link you received, or enter its code below.</p></div>}
    {!current&&<><label>Invitation type<select disabled={busy} value={token?kind:manualKind} onChange={e=>{setManualKind(e.target.value as Kind);onInvitation(e.target.value as Kind,'')}}><option value="family">Join an existing household</option><option value="pilot">Start an invited new household</option></select></label><label>Invitation code<input autoComplete="off" disabled={busy} value={token} onChange={e=>onInvitation(token?kind:manualKind,e.target.value.trim())}/></label></>}
