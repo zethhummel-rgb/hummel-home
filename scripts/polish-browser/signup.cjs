@@ -3,7 +3,7 @@ const {launchBrowser}=require('./browser.cjs');
 const {setFixtureHandler,serveFixture,redirectFixtureAPI}=require('./fixture-api.cjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const dir=path.resolve('dist'),home='11111111-1111-4111-8111-111111111111',uid='22222222-2222-4222-8222-222222222222';
-const user={id:uid,email:'shopper@example.invalid',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
+const user={id:uid,email:'a'.repeat(64)+'@example.invalid',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
 const member={user_id:uid,display_name:'Alex Morgan',role:'member',household_id:home};
 const products=['Milk','Bread','Eggs'].map((title,i)=>({id:'33333333-3333-4333-8333-33333333333'+i,title,category:'Dairy & eggs',kind:'grocery',done:false,household_id:home,reminder_version:1,person:'Everyone',created_at:'2026-01-01',grocery_store:'Test market'}));
 products.push({id:'44444444-4444-4444-8444-444444444444',household_id:home,kind:'task',title:'Book camp tickets',category:'Other',person:'Everyone',done:true,due:'2026-10-01',reminder_version:1,created_at:'2026-01-01'});
@@ -50,7 +50,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  });
  page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
  await page.goto(url);await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByRole('button',{name:'Create my account',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(requests.length,0);pass('Missing invitation cannot create an account');
- await page.getByLabel('Invitation code',{exact:true}).fill(code);await page.getByLabel('Email address',{exact:true}).waitFor();assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),user.email);assert(await page.getByLabel('Email address',{exact:true}).getAttribute('readonly')!==null);pass('Manual code securely resolves and locks the invited address');
+ await page.getByLabel('Invitation code',{exact:true}).fill(code);await page.getByLabel('Email address',{exact:true}).waitFor();assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),user.email);assert(await page.getByLabel('Email address',{exact:true}).getAttribute('readonly')!==null);for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Long email overflow at '+width)}await page.setViewportSize({width:390,height:844});pass('Manual code resolves and locks the invited address; long emails fit at 320/390/1280');
  async function fillAccount(){await page.getByLabel('Your name',{exact:true}).fill('Invited Person');await page.getByLabel(/^Password/).fill('Fixture-password-123');if(await page.getByLabel(/^Confirm password/).count())await page.getByLabel(/^Confirm password/).fill('Fixture-password-123')}
  for(const kind of ['family','pilot']){
   await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});registered=false;joined=false;scenario='new';

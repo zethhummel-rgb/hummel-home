@@ -38,12 +38,12 @@ export default function InvitationSignup({family,pilot,onInvitation,onSignIn,onA
   }catch(e){setError((e as Error).message||'Could not continue. Please try again.')}finally{pending.current=false;setBusy(false)}
  }
  return <><span className="round-icon sage"><Heart/></span><h2>Accept your invitation.</h2>
-  <p>{family?'Join your family’s private home.':'Create your own private household.'} Your invitation verifies your email—no second confirmation email.</p>
+  <p>{(token?kind:manualKind)==='family'?'Join your family’s private home.':'Create your own private household.'} Your invitation verifies your email—no second confirmation email.</p>
   <form onSubmit={submit}>
    {!token&&<div className="setup-note"><b>HH is invitation-only during the pilot.</b><p>Open the invitation link you received, or enter its code below.</p></div>}
    {!current&&<><label>Invitation type<select disabled={busy} value={token?kind:manualKind} onChange={e=>{setManualKind(e.target.value as Kind);onInvitation(e.target.value as Kind,'')}}><option value="family">Join an existing household</option><option value="pilot">Start an invited new household</option></select></label><label>Invitation code<input autoComplete="off" disabled={busy} value={token} onChange={e=>onInvitation(token?kind:manualKind,e.target.value.trim())}/></label></>}
    {checking&&<p role="status">Checking your invitation…</p>}
-   {current&&<><div className="setup-note">{current.householdName?`You’re invited to join ${current.householdName}.`:'You’re invited to create your own private home.'} This invitation is for <strong>{current.email}</strong>.</div>
+   {current&&<><div className="setup-note" style={{overflowWrap:'anywhere'}}>{current.householdName?`You’re invited to join ${current.householdName}.`:'You’re invited to create your own private home.'} This invitation is for <strong>{current.email}</strong>.</div>
     <label>Email address<input type="email" value={current.email} readOnly autoComplete="email"/></label>
     <details className="picked"><summary>Your invitation code</summary><label>Invitation code<input value={token} readOnly autoComplete="off"/></label><p className="field-help">Filled in from your invitation. It stops working after you join or create your household.</p></details>
     <label>Your name<input required maxLength={60} autoComplete="given-name" value={name} disabled={busy} onChange={e=>setName(e.target.value)}/></label>
