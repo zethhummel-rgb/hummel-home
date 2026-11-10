@@ -171,7 +171,7 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
   await safari.getByRole('button',{name:'Restart practice',exact:true}).click();
   assert(await safari.getByRole('button',{name:compact?'Practice: Open Safari menu':'Practice: Share',exact:true}).isVisible());
   await safari.getByRole('button',{name:'Close Safari tutorial',exact:true}).click();
-  assert(await safari.locator('.safari-launch').evaluate(el=>document.activeElement===el));
+  await page.waitForFunction(()=>document.activeElement?.matches('.safari-launch'));
  }
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Done',exact:true}).click();
  record('safari-install',['Both Safari layouts at 320/390/1280px','Action-only highlight','No writes or installation claim','Open as Web App, restart and close focus']);
