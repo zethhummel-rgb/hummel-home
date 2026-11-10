@@ -151,11 +151,11 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
   record(guide.id,[guide.steps.length+' required steps completed','no server writes or email','practice forms cleared',...(guide.id==='event-options'?['focused spotlight and keyboard-visible Next']:[])]);
  }
 
- // Safari controls live outside the DOM: practise both example layouts without claiming installation.
+ // Safari controls live outside the DOM: practise all three example layouts without claiming installation.
  await openHelp();const safari=page.getByRole('region',{name:'Safari Home Screen tutorial',exact:true});assert.equal(await safari.count(),1,'Show a single Safari lesson');
- for(const width of [320,390,1280])for(const compact of [true,false]){
+ for(const width of [320,390,1280])for(const layout of ['dots','share','left']){const compact=layout!=='share';
   await page.setViewportSize({width,height:568});await safari.getByRole('button',{name:'Add the HH icon to your iPhone'}).click();
-  await safari.getByLabel(compact?'A three-dot (…) menu':'The Share arrow is visible').check();
+  await safari.getByLabel(layout==='left'?'The three-line menu is on the left':layout==='dots'?'A three-dot (…) menu':'The Share arrow is visible').check();
   assert.equal(await safari.locator('.safari-target').count(),1);
   if(compact)await safari.getByRole('button',{name:'Practice: Open Safari menu',exact:true}).click();
   await safari.getByRole('button',{name:'Practice: Share',exact:true}).click();
@@ -174,7 +174,7 @@ if(req.method()==='PATCH'){for(const row of data){Object.assign(row,req.postData
   await page.waitForFunction(()=>document.activeElement?.matches('.safari-launch'));
  }
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'Done',exact:true}).click();
- record('safari-install',['Both Safari layouts at 320/390/1280px','Action-only highlight','No writes or installation claim','Open as Web App, restart and close focus']);
+ record('safari-install',['All three Safari layouts at 320/390/1280px','Action-only highlight','No writes or installation claim','Open as Web App, restart and close focus']);
  await openHelp();await page.locator('[data-tutorial-id="calendar"]').click();await page.getByRole('button',{name:'Start practice',exact:true}).click();await (await target('[data-tour="nav-Calendar"]')).click();await (await target('[data-tour="calendar-today"]')).click();await page.keyboard.press('Escape');await page.getByRole('alertdialog',{name:'Exit practice?'}).waitFor();await page.getByRole('button',{name:'Keep practising',exact:true}).click();assert(await page.locator('.tutorial-coach').isVisible());await page.keyboard.press('Escape');await page.getByRole('button',{name:'Exit practice',exact:true}).click();assert.equal(await page.locator('.tutorial-coach').count(),0);record('exit',['Escape offers explicit exit','Keep practising retains position','Exit releases tutorial']);
  // Restart and exit must clean up only the practice form, including a typed draft.
  await page.emulateMedia({reducedMotion:'reduce'});await openHelp();await page.locator('[data-tutorial-id="groceries"]').click();await page.getByRole('button',{name:'Start practice',exact:true}).click();await (await target('[data-tour="nav-Groceries"]')).click();await (await target('[data-tour="grocery-add"]')).click();await (await target('.grocery-editor input[placeholder="e.g. Kidney beans"]')).fill('Half-finished practice');await page.waitForFunction(()=>document.querySelector('[data-tutorial-highlight]'));
