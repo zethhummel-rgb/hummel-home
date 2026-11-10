@@ -1,0 +1,32 @@
+name: TEST release checks
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    if: github.repository == 'zethhummel-rgb/hummel-home'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:calendar
+      - run: npm run test:database
+      - run: npm run test:invitations
+      - run: npm run test:recovery
+      - run: npm run test:welcome
+      - run: npm run test:staging
+      - run: npm run test:feedback
+      - run: npm run test:polish
+      - run: node scripts/check-offline-shopping.mjs
+      - run: node scripts/check-portal-search.mjs
+      - run: npm run build
+        env:
+          VITE_APP_ENV: test

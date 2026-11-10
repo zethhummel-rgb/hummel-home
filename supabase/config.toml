@@ -15,3 +15,7 @@ verify_jwt = false
 
 [functions.self-service-deletion]
 verify_jwt = false
+
+# Authenticated by the single-use, email-bound invitation capability in the function.
+[functions.invitation-registration]
+verify_jwt = false

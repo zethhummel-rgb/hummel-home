@@ -34,7 +34,7 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
       - run: npx --no-install playwright install --with-deps ${{ matrix.engine }}
       - run: npm run build
-      - run: node scripts/check-invitation-reissue.mjs
+      - run: npm run test:invitations
       - name: Run all 36 configurations and focused checks
         run: |
           node scripts/polish-browser/interactive-tutorials.cjs
