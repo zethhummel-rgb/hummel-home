@@ -2,8 +2,8 @@ import {useEffect,useId,useRef,useState} from 'react';
 import {ArrowLeft,Check,Ellipsis,PlusSquare,RotateCcw,Share,Smartphone,X} from 'lucide-react';
 import './safari-install-tutorial.css';
 type Screen='browser'|'menu'|'sheet'|'confirm'|'done';
-export default function SafariInstallTutorial(){
- const [open,setOpen]=useState(false),[compact,setCompact]=useState(true),[index,setIndex]=useState(0),[webApp,setWebApp]=useState(true),[notice,setNotice]=useState('');
+export default function SafariInstallTutorial({initialOpen=false}:{initialOpen?:boolean}){
+ const [open,setOpen]=useState(initialOpen),[compact,setCompact]=useState(true),[index,setIndex]=useState(0),[webApp,setWebApp]=useState(true),[notice,setNotice]=useState('');
  const titleId=useId(),panelId=useId(),heading=useRef<HTMLHeadingElement>(null),launcher=useRef<HTMLButtonElement>(null);
  const screens:Screen[]=compact?['browser','menu','sheet','confirm','done']:['browser','sheet','confirm','done'];
  const screen=screens[index],address=new URL('.',location.href).href;
@@ -14,7 +14,7 @@ export default function SafariInstallTutorial(){
  async function copy(){try{await navigator.clipboard.writeText(address);setNotice('Website address copied. Paste it into Safari.')}catch{setNotice('Touch and hold the website address to copy it.')}}
  const titles:Record<Screen,string>={browser:compact?'Find Safari’s menu':'Find the Share button',menu:'Choose Share',sheet:'Find Add to Home Screen',confirm:'Finish with Add',done:'Practice complete — now try Safari'};
  const instructions:Record<Screen,string>={browser:compact?'Tap the highlighted three dots in the example Safari toolbar.':'Tap the highlighted square with an upward arrow in the example Safari toolbar.',menu:'Tap Share in this example menu. Your Safari menu may look a little different.',sheet:'In Safari, scroll down the Share sheet to find Add to Home Screen. Tap that row in this example.',confirm:'Keep Open as Web App on if Safari shows it, then tap Add at the top right. Try Add here.',done:'You have practised the taps. This example has not added an icon to your phone.'};
- return <section className="safari-lesson" aria-label="Safari Home Screen tutorial">
+ return <section className="safari-lesson" data-safari-install-guide aria-label="Safari Home Screen tutorial">
   <button ref={launcher} type="button" className="interactive-lesson safari-launch" aria-expanded={open} aria-controls={open?panelId:undefined} onClick={()=>{if(open)close();else{reset();setOpen(true)}}}><span><b>Add the HH icon to your iPhone</b><small>Practise Safari’s menus, then add the real icon to your Home Screen.</small></span><Smartphone size={24}/></button>
   {open&&<div id={panelId} className="safari-practice" role="region" aria-labelledby={titleId}>
    <div className="safari-practice-top"><strong>SAFARI PRACTICE · EXAMPLE MENUS</strong><button type="button" className="icon-button" aria-label="Close Safari tutorial" onClick={close}><X size={20}/></button></div>
