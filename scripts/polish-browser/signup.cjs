@@ -25,13 +25,19 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
  browser=await launchBrowser();
- const context=await browser.newContext({viewport:{width:390,height:844}});
+ let context;
 
  const requests=[],checks=[],errors=[];let scenario='new',registered=false,joined=false;
  const code='a'.repeat(64),expired='e'.repeat(64);const out=path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish');
  function pass(name){checks.push(name);fs.writeFileSync(path.join(out,'signup.json'),JSON.stringify({checks,errors,requests},null,2));console.log('PASS '+name)}
- await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
- await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
+ async function freshScenario(){
+  // Let the previous synthetic requests finish before disposing of the page.
+  if(context){await page.waitForLoadState('networkidle');await context.close()}
+  context=await browser.newContext({viewport:{width:390,height:844}});
+  await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
+  await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
+  page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+ }
  setFixtureHandler(async route=>{
   const req=route.request(),u=new URL(req.url()),body=req.postDataJSON();requests.push({path:u.pathname,body});
   if(u.pathname.endsWith('/invitation-registration')){
@@ -48,12 +54,12 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   if(u.pathname.endsWith('/household_members'))return route.fulfill({json:joined?[member]:[]});
   return route.fulfill({json:[]});
  });
- page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+ await freshScenario();
  await page.goto(url);await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByRole('button',{name:'Create my account',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(requests.length,0);pass('Missing invitation cannot create an account');
  await page.getByLabel('Invitation code',{exact:true}).fill(code);await page.getByLabel('Email address',{exact:true}).waitFor();assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),user.email);assert(await page.getByLabel('Email address',{exact:true}).getAttribute('readonly')!==null);for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Long email overflow at '+width)}await page.setViewportSize({width:390,height:844});pass('Manual code resolves and locks the invited address; long emails fit at 320/390/1280');
  async function fillAccount(){await page.getByLabel('Your name',{exact:true}).fill('Invited Person');await page.getByLabel(/^Password/).fill('Fixture-password-123');if(await page.getByLabel(/^Confirm password/).count())await page.getByLabel(/^Confirm password/).fill('Fixture-password-123')}
  for(const kind of ['family','pilot']){
-  await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});registered=false;joined=false;scenario='new';
+  await freshScenario();registered=false;joined=false;scenario='new';
   await page.goto(url+'?'+(kind==='family'?'invite':'pilot')+'='+code+'&email=attacker%40example.invalid');await page.getByLabel('Email address',{exact:true}).waitFor();
   assert.equal(await page.getByLabel('Email address',{exact:true}).inputValue(),user.email);await page.getByText('Your invitation code',{exact:true}).click();assert.equal(await page.getByLabel('Invitation code',{exact:true}).inputValue(),code);await fillAccount();
   await page.getByRole('button',{name:'Create my account',exact:true}).click();
@@ -61,11 +67,12 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   const registration=requests.filter(x=>x.path.endsWith('/invitation-registration')&&x.body.action==='register').at(-1);assert.equal(registration.body.kind,kind);assert.equal(registration.body.token,code);assert.equal(registration.body.email,undefined);
   assert.equal(requests.filter(x=>/\/(signup|resend|otp)$/.test(x.path)).length,0);pass(kind+': invitation creates account and signs in without a second email');
   if(kind==='pilot')await page.getByLabel('Family or household name',{exact:true}).fill('Fixture Home');
+  const householdLoaded=page.waitForResponse(response=>response.url().includes('/household_members?')&&new URL(response.url()).searchParams.has('household_id')&&response.ok());
   await page.getByRole('button',{name:kind==='family'?'Join household':'Create my household',exact:true}).click();
-  await page.waitForURL(url);assert(joined);const acceptance=requests.findLast(x=>x.path.endsWith(kind==='family'?'/accept_household_invite':'/create_pilot_household'));assert.equal(acceptance.body[kind==='family'?'invite_token':'pilot_token'],code);pass(kind+': household acceptance uses the original code and clears the invitation URL');
+  await page.waitForURL(url);await page.locator('.mobile-nav').waitFor({state:'attached'});await (await householdLoaded).finished();assert(joined);const acceptance=requests.findLast(x=>x.path.endsWith(kind==='family'?'/accept_household_invite':'/create_pilot_household'));assert.equal(acceptance.body[kind==='family'?'invite_token':'pilot_token'],code);pass(kind+': household acceptance uses the original code and clears the invitation URL');
  }
- await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});joined=false;scenario='existing';await page.goto(url+'?invite='+code);await page.getByText(/You already started an account/).waitFor();assert.equal(await page.getByLabel(/^Confirm password/).count(),0);await fillAccount();await page.getByRole('button',{name:'Continue to household',exact:true}).click();await page.getByRole('heading',{name:'Join your family.',exact:true}).waitFor();pass('Previously started accounts use the existing password without a duplicate signup');
- await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});await page.goto(url+'?invite='+expired);await page.getByRole('alert').waitFor();assert.match(await page.getByRole('alert').innerText(),/already used/);assert.equal(await page.getByLabel(/^Password/).count(),0);pass('Expired, cancelled or used invitation shows recovery guidance before requesting a password');
+ await freshScenario();joined=false;scenario='existing';await page.goto(url+'?invite='+code);await page.getByText(/You already started an account/).waitFor();assert.equal(await page.getByLabel(/^Confirm password/).count(),0);await fillAccount();await page.getByRole('button',{name:'Continue to household',exact:true}).click();await page.getByRole('heading',{name:'Join your family.',exact:true}).waitFor();pass('Previously started accounts use the existing password without a duplicate signup');
+ await freshScenario();await page.goto(url+'?invite='+expired);await page.getByRole('alert').waitFor();assert.match(await page.getByRole('alert').innerText(),/already used/);assert.equal(await page.getByLabel(/^Password/).count(),0);pass('Expired, cancelled or used invitation shows recovery guidance before requesting a password');
  scenario='failure';await page.goto(url+'?invite='+code);await page.getByLabel('Email address',{exact:true}).waitFor();await fillAccount();await page.getByRole('button',{name:'Create my account',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.getByLabel('Your name',{exact:true}).inputValue(),'Invited Person');assert.equal(await page.getByLabel(/^Password/).inputValue(),'Fixture-password-123');pass('Service failure preserves entries for retry');
  await page.screenshot({path:path.join(out,'one-email-invitation.png'),fullPage:true});
  assert.deepEqual(errors,[]);pass('No runtime exceptions; all account and email requests intercepted');
