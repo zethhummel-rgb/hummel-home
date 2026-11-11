@@ -19,3 +19,7 @@ verify_jwt = false
 # Authenticated by the single-use, email-bound invitation capability in the function.
 [functions.invitation-registration]
 verify_jwt = false
+
+# Signed-in hosts use a session. Guests use the private invitation link.
+[functions.event-guests]
+verify_jwt = false

@@ -23,6 +23,7 @@ jobs:
       - run: npm run test:calendar
       - run: npm run test:database
       - run: npm run test:invitations
+      - run: node scripts/check-event-guests.mjs
       - run: npm run test:recovery
       - run: npm run test:welcome
       - run: npm run test:staging
@@ -61,6 +62,7 @@ jobs:
       - run: npm run test:invitations
       - name: Run all 36 configurations and focused checks
         run: |
+          node scripts/polish-browser/event-guests.cjs
           node scripts/polish-browser/interactive-tutorials.cjs
           node scripts/polish-browser/selected-usability.cjs
           node scripts/polish-browser/input-cards.cjs
