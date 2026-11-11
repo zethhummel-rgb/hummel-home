@@ -23,6 +23,7 @@ jobs:
       - run: npm run test:calendar
       - run: npm run test:database
       - run: npm run test:invitations
+      - run: node scripts/check-event-guests.mjs
       - run: npm run test:recovery
       - run: npm run test:welcome
       - run: npm run test:staging
