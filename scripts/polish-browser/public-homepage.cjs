@@ -102,6 +102,29 @@ async function run() {
       assert.equal(page.url(), app + 'home.html');
       // Let Firefox finish this navigation before resizing the next viewport.
       await page.waitForLoadState('load');
+      await page.getByRole('link', {name: 'More about HH', exact: true}).click();
+      await page.waitForLoadState('load');
+      assert.equal(page.url(), app + 'about.html');
+      await page.getByRole('heading', {name: 'A little more together.', exact: true}).waitFor();
+      const chapters = page.locator('.about-chapter');
+      assert.equal(await chapters.count(), 3);
+      assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'relative', 'Reduced motion reads as a regular page');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'About page fits width ' + width);
+      await page.getByRole('link', {name: 'Take a closer look'}).click();
+      assert.equal(new URL(page.url()).hash, '#everyday');
+      const aboutScreens = page.locator('.chapter-art img');
+      assert.equal(await aboutScreens.count(), 6);
+      for (const screen of await aboutScreens.all()) {
+        await screen.scrollIntoViewIfNeeded();
+        assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
+      }
+      await page.getByText('Using Google Calendar with HH', {exact: true}).click();
+      assert.equal(await page.getByRole('link', {name: 'Read about Google access and privacy'}).getAttribute('href'), './privacy.html#google-calendar');
+      if (width === 390 || width === 1440) await page.screenshot({path: path.join(out, 'public-about-' + width + '.png'), fullPage: true});
+      await page.getByRole('link', {name: 'Request an invitation', exact: true}).click();
+      await page.getByRole('heading', {name: 'Request an invitation', exact: true}).waitFor();
+      assert.equal(page.url(), app + 'request-invitation.html');
+      await page.goto(app + 'home.html');
     }
     assert.deepEqual(demoRequests, [], 'Public demos never contact a backend or submit data');
 
@@ -116,7 +139,26 @@ async function run() {
     const lastScene = page.locator('[data-scroll-screens]').last();
     await lastScene.scrollIntoViewIfNeeded();
     await lastScene.and(page.locator('.is-entering')).waitFor();
-    console.log('Sage & Linen homepage, local demos, invitation draft and TEST sign-in passed at 320, 390, 768 and 1440px.');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({width, height: 900});
+      await page.goto(app + 'about.html');
+      await page.evaluate(() => {
+        const second = document.querySelectorAll('.about-chapter')[1];
+        window.scrollTo(0, second.getBoundingClientRect().top + scrollY - 170);
+      });
+      await page.waitForFunction(() => {
+        const [first, second] = document.querySelectorAll('.about-chapter');
+        const next = second.getBoundingClientRect();
+        const front = document.elementFromPoint(innerWidth / 2, next.top + 18);
+        return getComputedStyle(first).position === 'sticky' &&
+          Number(first.style.getPropertyValue('--paper-scale')) < 0.99 &&
+          first.getBoundingClientRect().bottom > next.top &&
+          front?.closest('.about-chapter') === second;
+      });
+      await page.screenshot({path: path.join(out, 'public-about-stack-' + width + '.png')});
+    }
+    assert.deepEqual(errors, []);
+    console.log('Sage & Linen homepage and About, demos, invitation draft and TEST sign-in passed at 320, 390, 768 and 1440px. Scroll layering passed at 390 and 1440px.');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));
