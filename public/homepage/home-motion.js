@@ -1,47 +1,4 @@
 const motion = matchMedia('(prefers-reduced-motion: no-preference)');
-const deck = document.querySelector('[data-feature-deck]');
-const cards = [...deck.querySelectorAll('.scene-card')];
-const clamp = value => Math.max(0, Math.min(1, value));
-let frame = 0;
-
-function updateTiles() {
-  frame = 0;
-  if (!motion.matches) return;
-
-  const viewport = document.documentElement.clientHeight;
-  const bounds = cards.map(card => card.getBoundingClientRect());
-  cards.forEach((card, index) => {
-    const current = bounds[index];
-    const next = bounds[index + 1];
-    const entrance = 1 - clamp((viewport - current.top) / (viewport * .46));
-    const overlap = next ? clamp((current.bottom - next.top) / Math.min(current.height, viewport)) : 0;
-    const direction = index % 2 === 0 ? -1 : 1;
-    card.style.setProperty('--scene-x', direction * (32 * entrance - 34 * overlap) + 'px');
-    card.style.setProperty('--scene-y', 42 * entrance - 14 * overlap + 'px');
-    card.style.setProperty('--scene-scale', String(1 - .08 * entrance - .10 * overlap));
-  });
-}
-
-function scheduleTiles() {
-  if (!frame && motion.matches) frame = requestAnimationFrame(updateTiles);
-}
-
-function measureTiles() {
-  const heights = cards.map(card => card.offsetHeight);
-  cards.forEach((card, index) => card.style.setProperty('--scene-height', heights[index] + 'px'));
-  deck.dataset.motionReady = '';
-  scheduleTiles();
-}
-
-if ('ResizeObserver' in window) {
-  const observer = new ResizeObserver(measureTiles);
-  cards.forEach(card => observer.observe(card));
-}
-addEventListener('scroll', scheduleTiles, {passive: true});
-addEventListener('resize', measureTiles);
-motion.addEventListener('change', scheduleTiles);
-measureTiles();
-
 const carousel = document.querySelector('[data-meal-carousel]');
 const track = carousel.querySelector('.meal-track');
 const slides = [...track.querySelectorAll('.meal-slide')];
