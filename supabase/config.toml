@@ -23,3 +23,7 @@ verify_jwt = false
 # Signed-in hosts use a session. Guests use the private invitation link.
 [functions.event-guests]
 verify_jwt = false
+
+# Public form. The function validates fields, limits delivery and uses a fixed inbox.
+[functions.request-pilot-invitation]
+verify_jwt = false
