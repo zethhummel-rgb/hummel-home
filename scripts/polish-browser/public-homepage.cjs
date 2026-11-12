@@ -63,8 +63,9 @@ async function run() {
       await page.getByRole('heading', {name: 'What’s the plan?', exact: true}).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Homepage fits width ' + width);
       assert.equal(await page.getByRole('link', {name: 'Sign in', exact: true}).isVisible(), true);
-      await page.locator('.hero').getByRole('link', {name: 'Explore HH'}).click();
-      assert.equal(new URL(page.url()).hash, '#explore');
+      const explore = page.locator('.hero').getByRole('link', {name: 'Explore HH'});
+      assert.equal(await explore.getAttribute('href'), './about.html');
+      await page.goto(app + 'home.html#explore');
       assert.equal(await page.locator('.feature-scene').count(), 3);
       const screens = page.locator('.home-preview img, .app-screen img');
       assert.equal(await screens.count(), 7);
@@ -130,7 +131,7 @@ async function run() {
       await page.getByRole('heading', {name: 'A little more together.', exact: true}).waitFor();
       const chapters = page.locator('.about-chapter');
       assert.equal(await chapters.count(), 4);
-      assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'sticky', 'Reduced motion keeps native card layering');
+      assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'static', 'Reduced motion keeps Explore tiles in reading order');
       assert.equal(await page.locator('.chapter-sheet').first().evaluate(sheet => getComputedStyle(sheet).transform), 'none');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'About page fits width ' + width);
       await page.getByRole('link', {name: 'Take a closer look'}).click();
@@ -140,6 +141,21 @@ async function run() {
       for (const screen of await aboutScreens.all()) {
         await screen.scrollIntoViewIfNeeded();
         assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
+      }
+      const previews = page.getByRole('group', {name: 'Calendar and reminders'});
+      assert.equal(await previews.getByText('Family calendar', {exact: true}).count(), 1);
+      if (width <= 590) {
+        const range = await previews.evaluate(rail => {
+          rail.scrollLeft = rail.scrollWidth;
+          return rail.scrollWidth - rail.clientWidth;
+        });
+        assert.ok(range > 100, 'The second preview can be swiped into view on phones');
+        await page.waitForFunction(() => {
+          const rail = document.querySelector('.chapter-art');
+          return Math.abs(rail.scrollWidth - rail.clientWidth - rail.scrollLeft) <= 1;
+        });
+      } else {
+        assert.equal(await previews.evaluate(rail => rail.scrollWidth <= rail.clientWidth), true);
       }
       await page.getByText('Using Google Calendar with HH', {exact: true}).click();
       assert.equal(await page.getByRole('link', {name: 'Read about Google access and privacy'}).getAttribute('href'), './privacy.html#google-calendar');
@@ -196,7 +212,17 @@ async function run() {
               const transform = new DOMMatrix(getComputedStyle(scene).transform);
               return transform.a < .98 && Math.abs(transform.e) > 4 && transform.f > 8;
             }, index);
-            await incoming.evaluate(card => scrollBy(0, card.getBoundingClientRect().top - innerHeight * .3));
+            const scales = await incoming.evaluate(async card => {
+              const panel = card.querySelector('[data-tile-panel]');
+              scrollBy(0, card.getBoundingClientRect().top - innerHeight * .3);
+              const scales = [];
+              for (let sample = 0; sample < 7; sample += 1) {
+                await new Promise(requestAnimationFrame);
+                scales.push(new DOMMatrix(getComputedStyle(panel).transform).a);
+              }
+              return scales;
+            });
+            assert.ok(new Set(scales).size >= 3, 'The tile grows over multiple frames');
             await stackPage.waitForFunction(index => {
               const scenes = document.querySelectorAll('.feature-scene');
               const previous = scenes[index - 1].getBoundingClientRect();
@@ -213,7 +239,11 @@ async function run() {
 
         if (width === 390 && height === 844) {
           const track = stackPage.getByRole('group', {name: 'Meal planner previews'});
-          await track.scrollIntoViewIfNeeded();
+          await track.evaluate(async element => {
+            element.scrollIntoView({block: 'center'});
+            // Let the browser commit the viewport scroll before sending touch input.
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          });
           const browserName = process.env.HH_BROWSER || 'chromium';
           if (browserName === 'chromium') {
             const session = await stackContext.newCDPSession(stackPage);
@@ -222,10 +252,10 @@ async function run() {
             const touch = (type, x) => session.send('Input.dispatchTouchEvent', {
               type, touchPoints: type === 'touchEnd' ? [] : [{x, y, id: 0}],
             });
-            await touch('touchStart', box.x + box.width * .94);
+            await touch('touchStart', box.x + box.width * .87);
             for (let step = 1; step <= 12; step += 1) {
               await delay(24);
-              await touch('touchMove', box.x + box.width * (.94 - step * .069));
+              await touch('touchMove', box.x + box.width * (.87 - step * .065));
             }
             await touch('touchEnd');
           } else {
@@ -240,27 +270,25 @@ async function run() {
         }
 
         await stackPage.goto(app + 'about.html');
-        await stackPage.waitForFunction(() => document.querySelector('.about-chapter').style.getPropertyValue('--card-height'));
-        for (const index of [1, 2, 3]) {
+        await stackPage.locator('[data-motion-ready]').waitFor();
+        for (const index of reducedMotion === 'no-preference' ? [1, 2, 3] : []) {
           await stackPage.evaluate(nextIndex => {
             window.scrollTo(0, 0);
             const next = document.querySelectorAll('.about-chapter')[nextIndex];
             window.scrollTo(0, next.getBoundingClientRect().top - 150);
           }, index);
-          await stackPage.waitForFunction(({nextIndex, animate}) => {
-            const cards = document.querySelectorAll('.about-chapter');
-            const previous = cards[nextIndex - 1];
-            const next = cards[nextIndex];
+          await stackPage.waitForFunction(nextIndex => {
+            const sheets = document.querySelectorAll('.chapter-sheet');
+            const previous = sheets[nextIndex - 1];
+            const next = sheets[nextIndex];
             const back = previous.getBoundingClientRect();
             const front = next.getBoundingClientRect();
             const visible = document.elementFromPoint(innerWidth / 2, front.top + 18);
-            const sheet = previous.querySelector('.chapter-sheet');
-            return getComputedStyle(previous).position === 'sticky' &&
-              back.bottom <= innerHeight + 1 &&
+            return getComputedStyle(previous.parentElement).position === 'sticky' &&
               back.bottom > front.top &&
-              visible?.closest('.about-chapter') === next &&
-              (animate ? Number(previous.style.getPropertyValue('--paper-scale')) < 0.99 : getComputedStyle(sheet).transform === 'none');
-          }, {nextIndex: index, animate: reducedMotion === 'no-preference'}, {timeout: 5000});
+              visible?.closest('.chapter-sheet') === next &&
+              new DOMMatrix(getComputedStyle(previous).transform).a < .99;
+          }, index, {timeout: 5000});
         }
         if (width === 375 || width === 1440) {
           await stackPage.screenshot({path: path.join(out, 'public-about-stack-' + width + '.png')});
@@ -270,7 +298,7 @@ async function run() {
       }
     }
     assert.deepEqual(errors, []);
-    console.log('Homepage tile entrances and overlaps, meal carousel, About card stack, and legacy email landing passed.');
+    console.log('Homepage and Explore tile motion, swipeable previews, reduced motion, and legacy email landing passed.');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

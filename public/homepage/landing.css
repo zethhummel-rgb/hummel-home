@@ -241,10 +241,12 @@ h1, h2, h3 { margin: 0; font-family: var(--serif); color: var(--heading); }
 .highlights { margin-top: clamp(42px, 7vw, 90px); scroll-margin-top: 22px; }
 .highlights > h2 { margin-bottom: 20px; font-size: clamp(1.85rem, 4vw, 3rem); letter-spacing: -.045em; }
 .feature-deck { isolation: isolate; }
-.scene-card { --scene-top: 16px; --scene-layer: 1; min-width: 0; }
+.scene-card { min-width: 0; }
 .scene-card + .scene-card { margin-top: clamp(20px, 3vw, 36px); }
-.scene-card:nth-child(2) { --scene-top: 34px; --scene-layer: 2; }
-.scene-card:nth-child(3) { --scene-top: 52px; --scene-layer: 3; }
+[data-tile-deck] > * { --tile-top: 16px; --tile-layer: 1; }
+[data-tile-deck] > :nth-child(2) { --tile-top: 34px; --tile-layer: 2; }
+[data-tile-deck] > :nth-child(3) { --tile-top: 52px; --tile-layer: 3; }
+[data-tile-deck] > :nth-child(4) { --tile-top: 66px; --tile-layer: 4; }
 .feature-scene {
   display: grid;
   grid-template-columns: minmax(200px, .64fr) 1fr;
@@ -263,16 +265,16 @@ h1, h2, h3 { margin: 0; font-family: var(--serif); color: var(--heading); }
 .scene-copy h3 { font-size: clamp(1.85rem, 3.65vw, 3.65rem); line-height: 1.03; letter-spacing: -.045em; }
 .scene-screens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: clamp(12px, 2vw, 24px); }
 @media (prefers-reduced-motion: no-preference) {
-  .home-main { overflow-x: clip; }
-  [data-motion-ready] > .scene-card {
+  .home-main, .about-page main { overflow-x: clip; }
+  [data-motion-ready] > * {
     position: sticky;
     /* On short screens, let the entire tile pass before holding its lower edge. */
-    top: min(var(--scene-top), calc(100vh - var(--scene-height) - 16px));
-    top: min(var(--scene-top), calc(100svh - var(--scene-height) - 16px));
-    z-index: var(--scene-layer);
+    top: min(var(--tile-top), calc(100vh - var(--tile-height) - 16px));
+    top: min(var(--tile-top), calc(100svh - var(--tile-height) - 16px));
+    z-index: var(--tile-layer);
   }
-  [data-motion-ready] .feature-scene {
-    transform: translate(var(--scene-x, 0px), var(--scene-y, 0px)) scale(var(--scene-scale, 1));
+  [data-motion-ready] [data-tile-panel] {
+    transform: var(--tile-transform, none);
     transform-origin: center top;
   }
 }

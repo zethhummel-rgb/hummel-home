@@ -8,9 +8,10 @@
   <meta name="description" content="HH Family brings your family plans, groceries, and invitations together in one shared place.">
   <title>What’s the plan? · HH Family TEST</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-  <link rel="stylesheet" href="./homepage/landing.css?v=tile-motion">
+  <link rel="stylesheet" href="./homepage/landing.css?v=explore">
   <script src="./homepage/demo.js" defer></script>
-  <script src="./homepage/home-motion.js" defer></script>
+  <script src="./homepage/tile-motion.js" defer></script>
+  <script src="./homepage/home-motion.js?v=explore" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -20,7 +21,7 @@
       <span>HH Family<small>TEST preview</small></span>
     </a>
     <nav class="main-nav" aria-label="Main">
-      <a class="nav-explore" href="#explore">Explore HH</a>
+      <a class="nav-explore" href="./about.html">Explore HH</a>
       <a href="./">Sign in</a>
       <a class="action primary nav-request" href="./request-invitation.html">Request an invitation</a>
     </nav>
@@ -34,7 +35,7 @@
         <p>One shared place for family plans, groceries, and invites.</p>
         <div class="hero-actions">
           <a class="action primary" href="./request-invitation.html">Request an invitation</a>
-          <a class="action secondary" href="#explore">Explore HH <span aria-hidden="true">↓</span></a>
+          <a class="action secondary" href="./about.html">Explore HH <span aria-hidden="true">→</span></a>
         </div>
       </div>
       <figure class="home-preview">
@@ -45,9 +46,9 @@
 
     <section class="highlights frame" id="explore" aria-labelledby="explore-title">
       <h2 id="explore-title">A weekend with HH</h2>
-      <div class="feature-deck" data-feature-deck>
+      <div class="feature-deck" data-tile-deck>
         <div class="scene-card">
-          <div class="feature-scene scene-sage">
+          <div class="feature-scene scene-sage" data-tile-panel>
             <div class="scene-copy">
               <h3>Skates packed.<br> Groceries sorted.</h3>
             </div>
@@ -64,7 +65,7 @@
           </div>
         </div>
         <div class="scene-card">
-          <div class="feature-scene scene-linen">
+          <div class="feature-scene scene-linen" data-tile-panel>
             <div class="scene-copy">
               <h3>What’s for dinner?<br> Who’s coming?</h3>
             </div>
@@ -81,7 +82,7 @@
           </div>
         </div>
         <div class="scene-card">
-          <div class="feature-scene scene-rose">
+          <div class="feature-scene scene-rose" data-tile-panel>
             <div class="scene-copy">
               <h3>Keys by the door.<br> Details in HH.</h3>
             </div>
