@@ -108,7 +108,8 @@ async function run() {
       await page.getByRole('heading', {name: 'A little more together.', exact: true}).waitFor();
       const chapters = page.locator('.about-chapter');
       assert.equal(await chapters.count(), 3);
-      assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'relative', 'Reduced motion reads as a regular page');
+      assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'sticky', 'Reduced motion keeps native card layering');
+      assert.equal(await page.locator('.chapter-sheet').first().evaluate(sheet => getComputedStyle(sheet).transform), 'none');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'About page fits width ' + width);
       await page.getByRole('link', {name: 'Take a closer look'}).click();
       assert.equal(new URL(page.url()).hash, '#everyday');
@@ -139,26 +140,58 @@ async function run() {
     const lastScene = page.locator('[data-scroll-screens]').last();
     await lastScene.scrollIntoViewIfNeeded();
     await lastScene.and(page.locator('.is-entering')).waitFor();
-    for (const width of [390, 1440]) {
-      await page.setViewportSize({width, height: 900});
-      await page.goto(app + 'about.html');
-      await page.evaluate(() => {
-        const second = document.querySelectorAll('.about-chapter')[1];
-        window.scrollTo(0, second.getBoundingClientRect().top + scrollY - 170);
+    for (const [width, height, reducedMotion] of [
+      [320, 420, 'no-preference'],
+      [375, 560, 'no-preference'],
+      [390, 620, 'reduce'],
+      [390, 844, 'no-preference'],
+      [844, 390, 'no-preference'],
+      [1440, 900, 'no-preference'],
+    ]) {
+      const phone = width < 1000;
+      const stackContext = await browser.newContext({
+        viewport: {width, height},
+        reducedMotion,
+        hasTouch: phone,
+        isMobile: phone && process.env.HH_BROWSER !== 'firefox',
+        serviceWorkers: 'block',
       });
-      await page.waitForFunction(() => {
-        const [first, second] = document.querySelectorAll('.about-chapter');
-        const next = second.getBoundingClientRect();
-        const front = document.elementFromPoint(innerWidth / 2, next.top + 18);
-        return getComputedStyle(first).position === 'sticky' &&
-          Number(first.style.getPropertyValue('--paper-scale')) < 0.99 &&
-          first.getBoundingClientRect().bottom > next.top &&
-          front?.closest('.about-chapter') === second;
-      });
-      await page.screenshot({path: path.join(out, 'public-about-stack-' + width + '.png')});
+      try {
+        await stackContext.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+        const stackPage = await stackContext.newPage();
+        stackPage.on('pageerror', error => errors.push(error.message));
+        await stackPage.goto(app + 'about.html');
+        await stackPage.waitForFunction(() => document.querySelector('.about-chapter').style.getPropertyValue('--card-height'));
+        for (const index of [1, 2]) {
+          await stackPage.evaluate(nextIndex => {
+            window.scrollTo(0, 0);
+            const next = document.querySelectorAll('.about-chapter')[nextIndex];
+            window.scrollTo(0, next.getBoundingClientRect().top - 150);
+          }, index);
+          await stackPage.waitForFunction(({nextIndex, animate}) => {
+            const cards = document.querySelectorAll('.about-chapter');
+            const previous = cards[nextIndex - 1];
+            const next = cards[nextIndex];
+            const back = previous.getBoundingClientRect();
+            const front = next.getBoundingClientRect();
+            const visible = document.elementFromPoint(innerWidth / 2, front.top + 18);
+            const sheet = previous.querySelector('.chapter-sheet');
+            return getComputedStyle(previous).position === 'sticky' &&
+              back.bottom <= innerHeight + 1 &&
+              back.bottom > front.top &&
+              visible?.closest('.about-chapter') === next &&
+              (animate ? Number(previous.style.getPropertyValue('--paper-scale')) < 0.99 : getComputedStyle(sheet).transform === 'none');
+          }, {nextIndex: index, animate: reducedMotion === 'no-preference'}, {timeout: 5000});
+        }
+        if (width === 375 || width === 1440) {
+          await stackPage.screenshot({path: path.join(out, 'public-about-stack-' + width + '.png')});
+        }
+      } finally {
+        await stackContext.close();
+      }
     }
     assert.deepEqual(errors, []);
-    console.log('Sage & Linen homepage and About, demos, invitation draft and TEST sign-in passed at 320, 390, 768 and 1440px. Scroll layering passed at 390 and 1440px.');
+    console.log('Homepage and About paths passed. Both card overlaps passed at six viewport sizes, including short and landscape phones and reduced motion.');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));
