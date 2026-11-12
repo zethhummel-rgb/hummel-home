@@ -1,10 +1,10 @@
 const chapters = [...document.querySelectorAll('.about-chapter')];
-const stackEnabled = matchMedia('(prefers-reduced-motion: no-preference) and (min-width: 360px) and (min-height: 680px)');
+const animateStack = matchMedia('(prefers-reduced-motion: no-preference)');
 let frame = 0;
 
 function updateStack() {
   frame = 0;
-  if (!stackEnabled.matches) return;
+  if (!animateStack.matches) return;
 
   const cards = chapters.map(chapter => chapter.getBoundingClientRect());
   for (let index = 0; index < cards.length - 1; index += 1) {
@@ -16,10 +16,20 @@ function updateStack() {
 }
 
 function scheduleStack() {
-  if (!frame && stackEnabled.matches) frame = requestAnimationFrame(updateStack);
+  if (!frame && animateStack.matches) frame = requestAnimationFrame(updateStack);
 }
 
+function measureCards() {
+  const heights = chapters.map(chapter => chapter.offsetHeight);
+  chapters.forEach((chapter, index) => chapter.style.setProperty('--card-height', heights[index] + 'px'));
+  scheduleStack();
+}
+
+if ('ResizeObserver' in window) {
+  const resizeObserver = new ResizeObserver(measureCards);
+  chapters.forEach(chapter => resizeObserver.observe(chapter));
+}
 addEventListener('scroll', scheduleStack, {passive: true});
-addEventListener('resize', scheduleStack);
-stackEnabled.addEventListener('change', scheduleStack);
-scheduleStack();
+addEventListener('resize', measureCards);
+animateStack.addEventListener('change', scheduleStack);
+measureCards();

@@ -45,11 +45,15 @@
 .chapter-deck { position: relative; isolation: isolate; }
 .about-chapter {
   --card-top: 20px;
-  position: relative;
+  position: sticky;
+  /* A tall sheet can scroll far enough to show its bottom before it sticks. */
+  top: min(var(--card-top), calc(100vh - var(--card-height, 0px) - 12px));
+  top: min(var(--card-top), calc(100svh - var(--card-height, 0px) - 12px));
+  z-index: 1;
   margin-bottom: clamp(16px, 4vw, 40px);
 }
-.about-chapter:nth-child(2) { --card-top: 32px; }
-.about-chapter:nth-child(3) { --card-top: 44px; }
+.about-chapter:nth-child(2) { --card-top: 32px; z-index: 2; }
+.about-chapter:nth-child(3) { --card-top: 44px; z-index: 3; }
 .chapter-sheet {
   position: relative;
   display: grid;
@@ -107,14 +111,11 @@
 .about-page .site-footer a[aria-current=page] { font-weight: 650; }
 
 @media (prefers-reduced-motion: no-preference) {
+  .chapter-sheet { transform: scale(var(--paper-scale, 1)); transform-origin: center top; }
   .fan-calendar { animation: open-fan-left 700ms 90ms cubic-bezier(.2,.8,.25,1) both; }
   .fan-invite { animation: open-fan-right 700ms 135ms cubic-bezier(.2,.8,.25,1) both; }
   @keyframes open-fan-left { from { transform: translateX(32%) rotate(-2deg); } }
   @keyframes open-fan-right { from { transform: translateX(-32%) rotate(2deg); } }
-}
-@media (prefers-reduced-motion: no-preference) and (min-width: 360px) and (min-height: 680px) {
-  .about-chapter { position: sticky; top: var(--card-top); }
-  .chapter-sheet { transform: scale(var(--paper-scale, 1)); transform-origin: center top; }
 }
 @media (max-width: 800px) {
   .about-hero { min-height: 0; padding: 28px; border-radius: 25px; }
