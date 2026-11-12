@@ -42,7 +42,7 @@ async function run() {
     const origin = 'http://127.0.0.1:' + server.address().port;
     const app = origin + scope;
     browser = await launchBrowser();
-    const context = await browser.newContext({serviceWorkers: 'block'});
+    const context = await browser.newContext({serviceWorkers: 'block', reducedMotion: 'reduce'});
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);
@@ -60,12 +60,28 @@ async function run() {
       const response = await page.goto(app + 'home.html');
       assert.equal(response.status(), 200);
       await page.getByRole('heading', {name: 'What’s the plan?', exact: true}).waitFor();
-      assert.equal(await page.locator('img').evaluateAll(images => images.every(image => image.complete && image.naturalWidth > 0)), true, 'All illustrations load');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Homepage fits width ' + width);
       assert.equal(await page.getByRole('link', {name: 'Sign in', exact: true}).isVisible(), true);
+      await page.locator('.hero').getByRole('link', {name: 'Explore HH'}).click();
+      assert.equal(new URL(page.url()).hash, '#explore');
+      assert.equal(await page.locator('.feature-scene').count(), 2);
+      const screens = page.locator('.home-preview img, .app-screen img');
+      assert.equal(await screens.count(), 5);
+      for (const screen of await screens.all()) {
+        await screen.scrollIntoViewIfNeeded();
+        assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
+      }
+      assert.equal(await page.locator('.scene-screens.is-entering').count(), 0, 'Reduced motion skips the entrance animation');
+      await page.evaluate(() => window.scrollTo(0, 0));
       if (width === 390 || width === 1440) await page.screenshot({path: path.join(out, 'public-home-' + width + '.png'), fullPage: true});
 
       const eggs = page.getByRole('checkbox', {name: 'Eggs'});
+      assert.equal(await eggs.isVisible(), false);
+      await page.getByText('Try a grocery list or RSVP', {exact: true}).click();
+      assert.equal(await page.locator('.week-board img').evaluateAll(async images => {
+        await Promise.all(images.map(image => image.decode()));
+        return images.every(image => image.naturalWidth > 0);
+      }), true, 'All demo illustrations load');
       await eggs.check();
       assert.equal(await eggs.isChecked(), true);
       await eggs.uncheck();
@@ -75,9 +91,6 @@ async function run() {
         assert.equal(await page.getByRole('radio', {name: reply, exact: true}).isChecked(), true);
         assert.equal(await page.getByRole('status').textContent(), 'Sample reply: ' + reply);
       }
-      await page.locator('.hero').getByRole('link', {name: 'Explore HH'}).click();
-      assert.equal(new URL(page.url()).hash, '#explore');
-
       await page.locator('.hero').getByRole('link', {name: 'Request an invitation'}).click();
       await page.getByRole('heading', {name: 'Request an invitation', exact: true}).waitFor();
       assert.equal(page.url(), app + 'request-invitation.html');
@@ -97,6 +110,12 @@ async function run() {
     await page.getByRole('heading', {name: 'Welcome home.'}).waitFor();
     assert.equal(await page.getByRole('link', {name: 'Explore HH', exact: true}).getAttribute('href'), './home.html');
     assert.deepEqual(errors, []);
+
+    await page.emulateMedia({reducedMotion: 'no-preference'});
+    await page.goto(app + 'home.html');
+    const lastScene = page.locator('[data-scroll-screens]').last();
+    await lastScene.scrollIntoViewIfNeeded();
+    await lastScene.and(page.locator('.is-entering')).waitFor();
     console.log('Sage & Linen homepage, local demos, invitation draft and TEST sign-in passed at 320, 390, 768 and 1440px.');
   } finally {
     await browser?.close();
