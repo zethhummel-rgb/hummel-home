@@ -45,6 +45,7 @@ async function run() {
     const context = await browser.newContext({serviceWorkers: 'block'});
     await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
     const errors = [];
     const demoRequests = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -86,6 +87,8 @@ async function run() {
       if (width === 390) await page.screenshot({path: path.join(out, 'public-invitation-request-390.png'), fullPage: true});
       await page.getByRole('link', {name: 'Back to HH Family'}).click();
       assert.equal(page.url(), app + 'home.html');
+      // Let Firefox finish this navigation before resizing the next viewport.
+      await page.waitForLoadState('load');
     }
     assert.deepEqual(demoRequests, [], 'Public demos never contact a backend or submit data');
 
