@@ -7,6 +7,8 @@ if(process.env.VITE_APP_ENV==='test'){
 }else{
  // Test-only instructions and fixtures must never appear in a production build.
  fs.rmSync('dist/test-guide.html',{force:true});
+ for(const page of ['home.html','request-invitation.html'])fs.rmSync('dist/'+page,{force:true});
+ fs.rmSync('dist/homepage',{force:true,recursive:true});
 }
 
 const assets=fs.readdirSync('dist/assets').filter(file=>/\.(js|css)$/.test(file)).sort().map(file=>'assets/'+file);
