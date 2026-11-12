@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
+const {setTimeout: delay} = require('node:timers/promises');
 const {launchBrowser} = require('./browser.cjs');
 
 const root = path.resolve('dist');
@@ -71,7 +72,28 @@ async function run() {
         await screen.scrollIntoViewIfNeeded();
         assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
       }
-      assert.equal(await page.locator('.scene-screens.is-entering').count(), 0, 'Reduced motion skips the entrance animation');
+      assert.equal(await page.locator('.feature-scene').first().evaluate(scene => getComputedStyle(scene).transform), 'none', 'Reduced motion keeps tiles still');
+      assert.equal(await page.locator('.scene-card').first().evaluate(card => getComputedStyle(card).position), 'static', 'Reduced motion keeps tiles in reading order');
+      const track = page.getByRole('group', {name: 'Meal planner previews'});
+      const position = page.locator('[data-meal-position]');
+      const previousMeal = page.getByRole('button', {name: 'Previous meal preview'});
+      const nextMeal = page.getByRole('button', {name: 'Next meal preview'});
+      assert.equal(await previousMeal.getAttribute('aria-disabled'), 'true');
+      await nextMeal.click();
+      assert.equal(await position.textContent(), '2 / 3');
+      await track.focus();
+      await page.keyboard.press('End');
+      assert.equal(await position.textContent(), '3 / 3');
+      assert.equal(await nextMeal.getAttribute('aria-disabled'), 'true');
+      const ingredients = track.getByRole('img', {name: /eggs and blueberries selected/});
+      assert.equal(await ingredients.evaluate(async img => {
+        await img.decode();
+        const image = img.getBoundingClientRect();
+        const track = img.closest('.meal-track').getBoundingClientRect();
+        return img.naturalWidth > 0 && image.left >= track.left && image.right <= track.right + 1;
+      }), true, 'The last preview snaps fully into view');
+      await previousMeal.click();
+      assert.equal(await position.textContent(), '2 / 3');
       await page.evaluate(() => window.scrollTo(0, 0));
       if (width === 390 || width === 1440) await page.screenshot({path: path.join(out, 'public-home-' + width + '.png'), fullPage: true});
 
@@ -141,11 +163,6 @@ async function run() {
     assert.equal(await page.getByRole('link', {name: 'Explore HH', exact: true}).getAttribute('href'), './home.html');
     assert.deepEqual(errors, []);
 
-    await page.emulateMedia({reducedMotion: 'no-preference'});
-    await page.goto(app + 'home.html');
-    const lastScene = page.locator('[data-scroll-screens]').last();
-    await lastScene.scrollIntoViewIfNeeded();
-    await lastScene.and(page.locator('.is-entering')).waitFor();
     for (const [width, height, reducedMotion] of [
       [320, 420, 'no-preference'],
       [375, 560, 'no-preference'],
@@ -166,6 +183,62 @@ async function run() {
         await stackContext.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
         const stackPage = await stackContext.newPage();
         stackPage.on('pageerror', error => errors.push(error.message));
+        await stackPage.goto(app + 'home.html');
+        if (reducedMotion === 'no-preference') {
+          const cards = stackPage.locator('.scene-card');
+          await stackPage.locator('[data-motion-ready]').waitFor();
+          for (const index of [1, 2]) {
+            const incoming = cards.nth(index);
+            await incoming.evaluate(card => scrollBy(0, card.getBoundingClientRect().top - innerHeight * .82));
+            await incoming.waitFor();
+            await stackPage.waitForFunction(index => {
+              const scene = document.querySelectorAll('.feature-scene')[index];
+              const transform = new DOMMatrix(getComputedStyle(scene).transform);
+              return transform.a < .98 && Math.abs(transform.e) > 4 && transform.f > 8;
+            }, index);
+            await incoming.evaluate(card => scrollBy(0, card.getBoundingClientRect().top - innerHeight * .3));
+            await stackPage.waitForFunction(index => {
+              const scenes = document.querySelectorAll('.feature-scene');
+              const previous = scenes[index - 1].getBoundingClientRect();
+              const front = scenes[index].getBoundingClientRect();
+              const target = document.elementFromPoint(innerWidth / 2, front.top + 20);
+              const scale = new DOMMatrix(getComputedStyle(scenes[index - 1]).transform).a;
+              return front.top < previous.bottom && target?.closest('.feature-scene') === scenes[index] && scale < .98;
+            }, index);
+            if (width === 390 && height === 844 && index === 1) {
+              await stackPage.screenshot({path: path.join(out, 'public-home-tile-overlap-390.png')});
+            }
+          }
+        }
+
+        if (width === 390 && height === 844) {
+          const track = stackPage.getByRole('group', {name: 'Meal planner previews'});
+          await track.scrollIntoViewIfNeeded();
+          const browserName = process.env.HH_BROWSER || 'chromium';
+          if (browserName === 'chromium') {
+            const session = await stackContext.newCDPSession(stackPage);
+            const box = await track.boundingBox();
+            const y = Math.round(box.y + box.height / 2);
+            const touch = (type, x) => session.send('Input.dispatchTouchEvent', {
+              type, touchPoints: type === 'touchEnd' ? [] : [{x, y, id: 0}],
+            });
+            await touch('touchStart', box.x + box.width * .94);
+            for (let step = 1; step <= 12; step += 1) {
+              await delay(24);
+              await touch('touchMove', box.x + box.width * (.94 - step * .069));
+            }
+            await touch('touchEnd');
+          } else {
+            await track.evaluate(track => track.scrollTo({left: track.children[1].offsetLeft}));
+          }
+          await stackPage.waitForFunction(() => {
+            const track = document.querySelector('.meal-track');
+            return Math.abs(track.scrollLeft - track.children[1].offsetLeft) < 2 &&
+              document.querySelector('[data-meal-position]').textContent === '2 / 3';
+          }, undefined, {timeout: 8_000});
+          await stackPage.screenshot({path: path.join(out, 'public-home-meal-carousel-390.png')});
+        }
+
         await stackPage.goto(app + 'about.html');
         await stackPage.waitForFunction(() => document.querySelector('.about-chapter').style.getPropertyValue('--card-height'));
         for (const index of [1, 2, 3]) {
@@ -197,7 +270,7 @@ async function run() {
       }
     }
     assert.deepEqual(errors, []);
-    console.log('Homepage, About and event email landing passed. All three card overlaps passed at six viewport sizes, including short and landscape phones and reduced motion.');
+    console.log('Homepage tile entrances and overlaps, meal carousel, About card stack, and legacy email landing passed.');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));
