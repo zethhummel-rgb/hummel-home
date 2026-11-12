@@ -8,13 +8,13 @@
   <meta name="description" content="A closer look at HH Family, the shared calendar, shopping list, and little details that keep your household together.">
   <title>About HH Family · TEST</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./homepage/landing.css">
-  <link rel="stylesheet" href="./homepage/about.css?v=phone-stack">
-  <script src="./homepage/about.js?v=phone-stack" defer></script>
+  <link rel="stylesheet" href="./homepage/landing.css?v=highlights">
+  <link rel="stylesheet" href="./homepage/about.css?v=highlights">
+  <script src="./homepage/about.js?v=highlights" defer></script>
 </head>
 <body class="about-page">
   <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header frame">
+  <header class="site-header frame" id="start">
     <a class="wordmark" href="./home.html" aria-label="HH Family TEST home">
       <img src="./icons/hh-180.png" alt="" width="48" height="48">
       <span>HH Family<small>TEST preview</small></span>
@@ -84,10 +84,23 @@
             </div>
           </div>
         </article>
+        <article class="about-chapter chapter-coastal">
+          <div class="chapter-sheet">
+            <div class="chapter-copy">
+              <h3>Make it feel<br> like home.</h3>
+              <p>Pick a colour palette and keep HH a tap away on your iPhone Home Screen.</p>
+              <ul class="chapter-labels"><li>Colour palettes</li><li>Home Screen guide</li></ul>
+            </div>
+            <div class="chapter-art">
+              <img class="chapter-main" src="./homepage/screens/appearance.webp" alt="HH Appearance settings with selectable colour palettes, including Sage &amp; Linen." width="780" height="910" loading="lazy">
+              <img class="chapter-side" src="./homepage/screens/home-screen.webp" alt="HH’s iPhone guide shows the icon to look for on your Home Screen." width="780" height="910" loading="lazy">
+            </div>
+          </div>
+        </article>
       </div>
     </section>
 
-    <section class="about-invite frame" id="start" aria-labelledby="start-title">
+    <section class="about-invite frame" id="request" aria-labelledby="start-title">
       <div>
         <h2 id="start-title">Make yourself at home.</h2>
         <p>Each person has their own login. Each household has its own private space.</p>

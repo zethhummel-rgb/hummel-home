@@ -54,6 +54,7 @@
 }
 .about-chapter:nth-child(2) { --card-top: 32px; z-index: 2; }
 .about-chapter:nth-child(3) { --card-top: 44px; z-index: 3; }
+.about-chapter:nth-child(4) { --card-top: 56px; z-index: 4; }
 .chapter-sheet {
   position: relative;
   display: grid;
@@ -71,6 +72,7 @@
 .chapter-sage { --chapter-bg: #e5eee0; --chapter-border: #bfcfba; --chapter-accent: #cfdec9; }
 .chapter-linen { --chapter-bg: #f5ecdd; --chapter-border: #dfcdb1; --chapter-accent: #ead8bd; }
 .chapter-rose { --chapter-bg: #f1e3e7; --chapter-border: #dbc1cc; --chapter-accent: #e8ccd7; }
+.chapter-coastal { --chapter-bg: #e6eef5; --chapter-border: #c2d2e0; --chapter-accent: #ccdceb; }
 .chapter-copy { position: relative; z-index: 1; }
 .chapter-copy h3 { font-size: clamp(2.4rem, 5vw, 5rem); font-weight: 500; line-height: .98; letter-spacing: -.06em; }
 .chapter-rose h3 { color: #5e384a; }
@@ -97,8 +99,8 @@
 }
 .chapter-main { z-index: 1; left: 4%; top: 6%; transform: rotate(-6deg); }
 .chapter-side { right: 3%; top: 13%; transform: rotate(8deg); }
-.chapter-linen .chapter-main { right: 4%; left: auto; transform: rotate(6deg); }
-.chapter-linen .chapter-side { right: auto; left: 3%; transform: rotate(-8deg); }
+.about-chapter:nth-child(even) .chapter-main { right: 4%; left: auto; transform: rotate(6deg); }
+.about-chapter:nth-child(even) .chapter-side { right: auto; left: 3%; transform: rotate(-8deg); }
 
 .about-invite { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px 30px; padding: 29px 0; border-top: 1px solid var(--line); scroll-margin-top: 14px; }
 .about-invite h2 { font-size: clamp(2rem, 4vw, 3.2rem); letter-spacing: -.05em; }

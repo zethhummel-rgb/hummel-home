@@ -64,9 +64,9 @@ async function run() {
       assert.equal(await page.getByRole('link', {name: 'Sign in', exact: true}).isVisible(), true);
       await page.locator('.hero').getByRole('link', {name: 'Explore HH'}).click();
       assert.equal(new URL(page.url()).hash, '#explore');
-      assert.equal(await page.locator('.feature-scene').count(), 2);
+      assert.equal(await page.locator('.feature-scene').count(), 3);
       const screens = page.locator('.home-preview img, .app-screen img');
-      assert.equal(await screens.count(), 5);
+      assert.equal(await screens.count(), 7);
       for (const screen of await screens.all()) {
         await screen.scrollIntoViewIfNeeded();
         assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
@@ -107,14 +107,14 @@ async function run() {
       assert.equal(page.url(), app + 'about.html');
       await page.getByRole('heading', {name: 'A little more together.', exact: true}).waitFor();
       const chapters = page.locator('.about-chapter');
-      assert.equal(await chapters.count(), 3);
+      assert.equal(await chapters.count(), 4);
       assert.equal(await chapters.first().evaluate(card => getComputedStyle(card).position), 'sticky', 'Reduced motion keeps native card layering');
       assert.equal(await page.locator('.chapter-sheet').first().evaluate(sheet => getComputedStyle(sheet).transform), 'none');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'About page fits width ' + width);
       await page.getByRole('link', {name: 'Take a closer look'}).click();
       assert.equal(new URL(page.url()).hash, '#everyday');
       const aboutScreens = page.locator('.chapter-art img');
-      assert.equal(await aboutScreens.count(), 6);
+      assert.equal(await aboutScreens.count(), 8);
       for (const screen of await aboutScreens.all()) {
         await screen.scrollIntoViewIfNeeded();
         assert.equal(await screen.evaluate(async image => { await image.decode(); return image.naturalWidth; }), 780);
@@ -129,6 +129,11 @@ async function run() {
     }
     assert.deepEqual(demoRequests, [], 'Public demos never contact a backend or submit data');
 
+    // The existing event email template links to this fragment.
+    await page.goto(app + 'about.html#start');
+    assert.equal(await page.evaluate(() => scrollY), 0, 'Event email opens the About hero');
+    assert.equal(await page.locator('#about-title').evaluate(title => title.getBoundingClientRect().top < innerHeight), true);
+    await page.goto(app + 'home.html');
     await page.getByRole('link', {name: 'Sign in', exact: true}).click();
     assert.equal(page.url(), app);
     await page.getByRole('heading', {name: 'Welcome home.'}).waitFor();
@@ -162,7 +167,7 @@ async function run() {
         stackPage.on('pageerror', error => errors.push(error.message));
         await stackPage.goto(app + 'about.html');
         await stackPage.waitForFunction(() => document.querySelector('.about-chapter').style.getPropertyValue('--card-height'));
-        for (const index of [1, 2]) {
+        for (const index of [1, 2, 3]) {
           await stackPage.evaluate(nextIndex => {
             window.scrollTo(0, 0);
             const next = document.querySelectorAll('.about-chapter')[nextIndex];
@@ -191,7 +196,7 @@ async function run() {
       }
     }
     assert.deepEqual(errors, []);
-    console.log('Homepage and About paths passed. Both card overlaps passed at six viewport sizes, including short and landscape phones and reduced motion.');
+    console.log('Homepage, About and event email landing passed. All three card overlaps passed at six viewport sizes, including short and landscape phones and reduced motion.');
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

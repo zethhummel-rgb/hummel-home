@@ -252,6 +252,7 @@ h1, h2, h3 { margin: 0; font-family: var(--serif); color: var(--heading); }
 }
 .scene-sage { background: #e9f0e5; }
 .scene-linen { grid-template-columns: 1fr minmax(200px, .64fr); background: #f4eee5; border-color: #e2d6c4; }
+.scene-rose { background: #f3e8ed; border-color: #e4cfd9; }
 .scene-linen .scene-copy { grid-column: 2; grid-row: 1; }
 .scene-linen .scene-screens { grid-column: 1; grid-row: 1; }
 .scene-copy h3 { font-size: clamp(1.85rem, 3.65vw, 3.65rem); line-height: 1.03; letter-spacing: -.045em; }
