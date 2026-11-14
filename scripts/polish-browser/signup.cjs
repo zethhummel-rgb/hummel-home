@@ -37,6 +37,18 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
   await context.routeWebSocket('**/*',socket=>socket.close());await context.addInitScript(redirectFixtureAPI);
   page=await context.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
+ // Keep the signup test independent of native permission dialogs and service worker updates.
+ await page.addInitScript(()=>{
+  let subscription=null;
+  const registration={pushManager:{
+   getSubscription:async()=>subscription,
+   subscribe:async()=>subscription={endpoint:'https://push.example.invalid/hh',toJSON(){return {endpoint:this.endpoint}}}
+  }};
+  Object.defineProperty(navigator,'serviceWorker',{value:{register:async()=>registration,ready:Promise.resolve(registration),addEventListener(){},removeEventListener(){}}});
+  Object.defineProperty(window,'PushManager',{value:function PushManager(){}});
+  Object.defineProperty(window,'Notification',{value:{get permission(){return subscription?'granted':'default'}}});
+ });
+
  }
  setFixtureHandler(async route=>{
   const req=route.request(),u=new URL(req.url()),body=req.postDataJSON();requests.push({path:u.pathname,body});
@@ -50,6 +62,7 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
   if(u.pathname.endsWith('/user'))return route.fulfill({json:user});
   if(u.pathname.includes('/auth/')&&!u.pathname.endsWith('/logout'))throw Error('Unexpected auth email request: '+u.pathname);
   if(u.pathname.endsWith('/accept_household_invite')||u.pathname.endsWith('/create_pilot_household')){joined=true;return route.fulfill({json:home})}
+  if(u.pathname.endsWith('/event-reminders'))return route.fulfill({json:{publicKey:'AQID',enabled:!!body?.endpoint}});
   if(u.pathname.endsWith('/pilot_status'))return route.fulfill({json:{is_host:false}});
   if(u.pathname.endsWith('/household_members'))return route.fulfill({json:joined?[{...member,role}]:[]});
   return route.fulfill({json:[]});
@@ -116,18 +129,34 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
    await page.getByRole('button',{name:'Skip for now',exact:true}).click();
    await page.getByRole('dialog',{name:'Add your little ones, too.'}).waitFor();
    await page.getByRole('button',{name:'Done',exact:true}).click();
-   await page.getByRole('dialog',{name:'Your home starts here.'}).waitFor();
-   await page.getByRole('button',{name:'Explore tutorials',exact:true}).click();
-   await page.locator('.interactive-lessons').waitFor();
-   assert.ok(await page.getByRole('button',{name:/Start interactive tutorial/}).count()>0);
-  }else{
-   await picker.getByRole('button',{name:'Next',exact:true}).click();
-   await page.getByRole('dialog',{name:'You’re part of the home.'}).waitFor();
-   await page.getByRole('button',{name:'Explore tutorials',exact:true}).click();
-   await page.locator('.interactive-lessons').waitFor();
-   assert.ok(await page.getByRole('button',{name:/Start interactive tutorial/}).count()>0);
   }
-  pass(kind+': setup offers the palette first and saves the chosen look on the device');
+  await page.evaluate(appleMobile=>{
+   Object.defineProperty(navigator,'userAgent',{configurable:true,value:appleMobile?'iPhone':'HH desktop browser fixture'});
+   Object.defineProperty(navigator,'maxTouchPoints',{configurable:true,value:appleMobile?5:0});
+  },kind==='family');
+  if(kind!=='pilot')await picker.getByRole('button',{name:'Next',exact:true}).click();
+  const notifications=page.getByRole('dialog',{name:'Turn on notifications?'});
+  await notifications.waitFor();
+  const subscriptions=()=>requests.filter(x=>x.path.endsWith('/event-reminders')&&x.body?.action==='subscribe');
+  assert.equal(subscriptions().length,0);
+  if(kind==='family'){
+   await notifications.getByRole('button',{name:/Add the HH icon to your iPhone/}).click();
+   await notifications.getByRole('button',{name:'Practice: Open Safari menu',exact:true}).click();
+   await notifications.getByRole('heading',{name:'Now tap Share',exact:true}).waitFor();
+   await notifications.getByRole('button',{name:'Close Safari tutorial',exact:true}).click();
+   await notifications.getByRole('button',{name:'Not now',exact:true}).click();
+   assert.equal(subscriptions().length,0);
+  }else{
+   await notifications.getByRole('button',{name:'Enable notifications',exact:true}).click();
+   await notifications.getByText('Enabled on this device',{exact:true}).waitFor();
+   assert.equal(subscriptions().length,1);
+   assert.equal(subscriptions()[0].body.householdId,home);
+   await notifications.getByRole('button',{name:'Continue',exact:true}).click();
+  }
+  await page.getByRole('dialog',{name:kind==='pilot'?'Your home starts here.':'You’re part of the home.'}).waitFor();
+  await page.getByRole('button',{name:'Explore tutorials',exact:true}).click();
+  await page.locator('.interactive-lessons').waitFor();
+  pass(kind+': setup prompts for notifications; consent or skip continues to the tutorials');
  }
  await freshScenario();joined=false;scenario='existing';role='member';await page.goto(url+'?invite='+code);await page.getByText(/You already started an account/).waitFor();assert.equal(await page.getByLabel(/^Confirm password/).count(),0);await fillAccount();await page.getByRole('button',{name:'Continue to household',exact:true}).click();await page.getByRole('heading',{name:'Join your family.',exact:true}).waitFor();pass('Previously started accounts use the existing password without a duplicate signup');
  await page.evaluate(uid=>localStorage.setItem('home-together:palette:'+uid,'lavender'),uid);
