@@ -1,4 +1,5 @@
 import {handleImportAction,handleImportCallback} from './import.ts';
+import {handlePersonalCalendar,personalCalendarCallback} from './personal.ts';
 import {transitionConfig,transitionRequest,transitionState,transitionWriteBlocked} from './transition.ts';
 import {runCalendarCopy} from './copy.ts';
 import {reminderMinutes,readReminder} from './reminders.ts';
@@ -14,6 +15,9 @@ const PROJECT=Deno.env.get('SUPABASE_URL')!;
 const ID=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_ID')||'';
 const SECRET=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_SECRET')||'';
 const CALLBACK=PROJECT+'/functions/v1/google-calendar/callback';
+const personalConfig={app:APP,callback:CALLBACK,
+ clientId:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_ID')||'':ID,
+ clientSecret:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_SECRET')||'':SECRET};
 const admin=createClient(PROJECT,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
@@ -46,20 +50,24 @@ function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e
 const redirect=(ok:boolean,message='')=>{const u=new URL(APP);u.searchParams.set('calendar_connection',ok?'connected':'error');if(message)u.searchParams.set('calendar_message',message.slice(0,200));return Response.redirect(u,303)};
 Deno.serve(async(req:Request)=>{
  const url=new URL(req.url);
- if(isTestProject&&(req.headers.has('x-hummel-cron')||url.pathname.endsWith('/callback')))return json({error:'External calendar connections are disabled in the test app.'},409);
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
  if(req.method==='POST'&&req.headers.has('x-hummel-cron')){
   try{
    const raw=await req.text();if(raw.length>1024)return json({error:'Invalid copy request'},400);
-   const body=JSON.parse(raw);if(body.action!=='sync'||typeof body.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(body.householdId))return json({error:'Invalid copy request'},400);
+   const body=JSON.parse(raw),personal=body.action==='personal_sync';
+   const isUuid=(value:unknown)=>typeof value==='string'&&/^[a-f0-9-]{36}$/.test(value);
+   if((body.action!=='sync'&&!personal)||!isUuid(body.householdId)||(personal&&!isUuid(body.userId)))return json({error:'Invalid copy request'},400);
+   if(isTestProject&&(!personal||!personalConfig.clientId||!personalConfig.clientSecret))return json({error:'External calendar connections are disabled in the test app.'},409);
    const r=await admin.rpc('push_service',{action:'secrets',payload:{}});const expected=r.data?.cronSecret;
    const digest=async(value:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));
    const [a,b]=await Promise.all([digest(req.headers.get('x-hummel-cron')||''),digest(expected||'')]);let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];
    if(r.error||!expected||diff)return json({error:'Unauthorized'},401);
-   return json(await runCalendarCopy(admin,body.householdId,{clientId:ID,clientSecret:SECRET}));
+   return json(await runCalendarCopy(admin,body.householdId,personal?personalConfig:{clientId:ID,clientSecret:SECRET},fetch,personal?body.userId:undefined));
   }catch{return json({error:'The Google copy could not finish. HH plans are preserved.'},400)}
  }
  if(req.method==='GET'&&url.pathname.endsWith('/callback')){
+  if(url.searchParams.get('state')?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret)return personalCalendarCallback(url,APP);
+  if(isTestProject)return json({error:'External calendar connections are disabled in the test app.'},409);
   if(url.searchParams.get('state')?.startsWith('hhi_'))return handleImportCallback(admin,url,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP});
   try{
    const state=url.searchParams.get('state');if(!state||state.length>200)return redirect(false,'Google connection expired. Please try connecting again.');
@@ -86,6 +94,9 @@ Deno.serve(async(req:Request)=>{
   const auth=await admin.auth.getUser(bearer);if(auth.error||!auth.data.user)return json({error:'Sign in again to open the calendar'},401);
   const raw=await req.text();if(raw.length>160000)return json({error:'Request too large'},400);const b=JSON.parse(raw);if(typeof b.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(b.householdId))return json({error:'Invalid household'},400);
   const membership=await admin.from('household_members').select('role').eq('household_id',b.householdId).eq('user_id',auth.data.user.id).maybeSingle();if(membership.error||!membership.data)return json({error:'This household is not available to your account'},403);
+  if(['personal_status','personal_start','personal_complete','personal_disconnect'].includes(b.action)){
+   return json(await handlePersonalCalendar(admin,b,auth.data.user.id,personalConfig));
+  }
   if(isTestProject&&(b.action==='start'||b.action==='sync'||typeof b.action==='string'&&b.action.startsWith('import_')))return json({error:'Google copy and import are disabled in the test app. Native calendars work normally.'},409);
   if(typeof b.action==='string'&&b.action.startsWith('import_'))return json(await handleImportAction(admin,b,auth.data.user.id,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP}));
   const cutover=await transitionState(admin,b.householdId);
