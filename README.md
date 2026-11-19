@@ -122,6 +122,12 @@ Before enabling: verify both owners, make a full snapshot, map all person tags, 
 
 The final cutover controls in `household-native-cutover.sql` are inert until explicitly enabled for a configured transition. A service-only atomic importer requires a paused, empty target and exact private snapshot hash. It verifies the complete Google master identity set, every list field (including generated reminder time), native event fields, and reminder aliases before changing the source. It leaves writes paused for a final external-source check. The recovery routine preserves all staged rows and snapshots while returning to the shared source; retained records require reconciliation before another import. Release writes only after verifying the committed rows and unchanged source snapshot. Original-app write and reminder guards must be deployed before pausing or completing the source.
 
+## Event address suggestions
+
+Apply the `event_address_quota` migration and deploy the `event-addresses` Edge Function before publishing the frontend. Enable Places API (New) on the Google Cloud project and set a Places-only `HH_GOOGLE_PLACES_API_KEY` separately in each Supabase project's Edge secrets. The key is used only by the server.
+
+The service reserves at most 50 autocomplete requests per Pacific-time billing month in TEST and 8,500 in HH. These limits leave room below the free allowance even when the two apps share a billing account. Keep that account’s other autocomplete usage in mind. The service counts each attempt and stops sending requests when it reaches the cap. Event locations can still be typed and saved. `node scripts/check-event-addresses.mjs` tests the database limit and request handling without contacting Google.
+
 ## Personal Google Calendar copies
 
 Settings → Calendar lets each signed-in household member connect a dedicated Google calendar. HH queues an independent copy of each event change for every connected member. An existing owner-managed calendar continues through its original copy and transfer flow. Disconnecting a personal copy removes its stored authorization and pending work. Existing events on that Google calendar can be removed in Google Calendar.
