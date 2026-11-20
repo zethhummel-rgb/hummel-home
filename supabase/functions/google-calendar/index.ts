@@ -15,7 +15,7 @@ const PROJECT=Deno.env.get('SUPABASE_URL')!;
 const ID=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_ID')||'';
 const SECRET=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_SECRET')||'';
 const CALLBACK=PROJECT+'/functions/v1/google-calendar/callback';
-const personalConfig={app:APP,callback:CALLBACK,
+const personalConfig={app:APP,callback:CALLBACK,test:isTestProject,
  clientId:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_ID')||'':ID,
  clientSecret:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_SECRET')||'':SECRET};
 const admin=createClient(PROJECT,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -110,7 +110,8 @@ Deno.serve(async(req:Request)=>{
    }
    return json(await twoWay('status'));
   }
-  if(['personal_status','personal_start','personal_complete','personal_disconnect'].includes(b.action)){
+  if(['personal_status','personal_start','personal_complete','personal_disconnect'].includes(b.action)||
+    (isTestProject&&['personal_existing_start','personal_existing_connect','personal_existing_cancel'].includes(b.action))){
    const result=await handlePersonalCalendar(admin,b,auth.data.user.id,personalConfig);
    if(isTestProject&&b.action==='personal_status'&&'connected' in result&&result.connected){
     return json({...result,twoWay:await twoWay('status')});
