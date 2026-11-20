@@ -62,12 +62,13 @@ export async function syncEvents(graph:Graph,call:Call,calendarId:string,since:s
    // newer data. An unknown change key is allowed only for recovered creates.
    if(link.change_key&&remote.changeKey!==link.change_key){review=true;continue}
    const current=await graph.event(calendarId,remote.id);
-   if(!current||current.changeKey!==remote.changeKey||!eventFields(current)||!current['@odata.etag']){
+   const currentFields=current&&eventFields(current);
+   if(!current||current.changeKey!==remote.changeKey||!currentFields||!current['@odata.etag']){
     review=true;continue;
    }
    if(!await call('current',{eventId,version}))continue;
    if(local) {
-    const updated=await graph.update(calendarId,remote.id,local,current['@odata.etag']);
+    const updated=await graph.update(calendarId,remote.id,local,currentFields,current['@odata.etag']);
     if(!updated||updated.id!==remote.id)throw new OutlookProblem('retry','Outlook did not confirm the event change.');
     await call('remember',{eventId,version,...remoteVersion(updated)});
    }else {

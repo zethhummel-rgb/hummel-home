@@ -115,6 +115,7 @@ const request=async(url,options)=>{
  assert.equal(options.headers['If-Match'],item['@odata.etag']);
  writes.push(method);
  if(method==='DELETE'){remote.delete(id);return new Response(null,{status:204})}
+ assert.deepEqual(body,{subject:'HH edit'},'Editing only the name must preserve Outlook formatting and location metadata');
  const updated={...item,...body,changeKey:'v3','@odata.etag':'W/"v3"'};
  remote.set(id,updated);
  return response(updated);

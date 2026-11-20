@@ -85,7 +85,8 @@ export function createGraph(accessToken:string,expiresAt:number,request=fetch) {
   exists:(id:string)=>get<{id:string}>('/v1.0/me/events/'+segment(id)+'?$select=id'),
   event:(calendar:string,id:string)=>get<OutlookEvent>(eventPath(calendar,id)+'?'+eventQuery),
   create:(calendar:string,event:EventFields,transactionId:string)=>get<OutlookEvent>(base(calendar)+'/events','POST',{...outlookFields(event),transactionId}),
-  update:(calendar:string,id:string,event:EventFields,etag:string)=>get<OutlookEvent>(eventPath(calendar,id),'PATCH',outlookFields(event),etag),
+  update:(calendar:string,id:string,event:EventFields,current:EventFields,etag:string)=>
+   get<OutlookEvent>(eventPath(calendar,id),'PATCH',outlookChanges(event,current),etag),
   remove:(calendar:string,id:string,etag:string)=>get<boolean>(eventPath(calendar,id),'DELETE',undefined,etag)
  };
 }
@@ -124,6 +125,18 @@ export function outlookFields(event:EventFields) {
  return {subject:event.title,body:{contentType:'text',content:event.description},
   location:{displayName:event.location},isAllDay:event.all_day,
   start:dateTime(event.starts_at,event.start_date),end:dateTime(event.ends_at,event.end_date)};
+}
+
+function outlookChanges(event:EventFields,current:EventFields) {
+ const next=outlookFields(event),before=outlookFields(current);
+ const dateChanged=next.isAllDay!==before.isAllDay||
+  JSON.stringify(next.start)!==JSON.stringify(before.start)||JSON.stringify(next.end)!==JSON.stringify(before.end);
+ return {
+  ...(next.subject.trim()!==before.subject.trim()?{subject:next.subject}:{}),
+  ...(next.body.content.replace(/\r\n/g,'\n')!==before.body.content?{body:next.body}:{}),
+  ...(next.location.displayName!==before.location.displayName?{location:next.location}:{}),
+  ...(dateChanged?{start:next.start,end:next.end,isAllDay:next.isAllDay}:{})
+ };
 }
 
 export function eventKey(event:EventFields) {
