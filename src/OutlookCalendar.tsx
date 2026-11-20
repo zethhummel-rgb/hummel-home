@@ -106,8 +106,8 @@ export default function OutlookCalendar({householdId,userId,returned}:{
      {choices.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}
     </select>
     <p className="settings-caption">{twoWay?
-     <>Everyone in your HH household can see one-time events, notes and locations from <strong>{destination?.name??'the selected calendar'}</strong>. New events, edits and deletions sync both ways.</>:
-     <>HH sends one-time events to <strong>{destination?.name??'the selected calendar'}</strong>. Edits and deletions to those shared events carry over. New events created only in Outlook stay there.</>}</p>
+     <>Everyone in your HH household can see events, notes and locations from <strong>{destination?.name??'the selected calendar'}</strong>. New events, edits and deletions sync both ways.</>:
+     <>HH sends events to <strong>{destination?.name??'the selected calendar'}</strong>. Edits and deletions to those shared events carry over. New events created only in Outlook stay there.</>}</p>
     <p className="settings-caption">Repeating events, meetings and private events stay in their original calendar.</p>
     <button type="submit" className="button primary wide" disabled={busy||!destination}>{twoWay?'Start two-way sync':'Start sharing to Outlook'}</button>
     <button type="button" className="text-button" disabled={busy} onClick={()=>{setNotice('');chooseMode(null)}}>Change how it syncs</button>
@@ -117,7 +117,7 @@ export default function OutlookCalendar({householdId,userId,returned}:{
    {status.active?<p><strong>{status.calendarName}</strong> · {status.importEvents?'Syncing both ways':'Sharing HH events'}<br/>Find it in Outlook under My calendars.</p>:
     <CalendarSetupChoices provider="Outlook" heading="Choose how to sync your plans. You’ll sign in with Microsoft next."
      disabled={busy} onChoose={next=>void run('authorize',{},next)}/>}
-   <p className="settings-caption">The trial covers ordinary one-time events. Private events, meetings and repeating events stay in their original calendar.</p>
+   <p className="settings-caption">One-time events and standard daily, weekly, monthly and yearly repeats can sync. Private events, meetings and custom repeat patterns stay in their original calendar.</p>
    {status.syncedAt&&status.active&&<p className="settings-caption">Last synced {new Date(status.syncedAt).toLocaleString()}</p>}
    {status.problem&&<p role="status">{problems[status.problem]}</p>}
    {status.active&&status.problem!=='reconnect'&&<button type="button" className="button soft wide" disabled={busy} onClick={()=>void run('sync')}>{busy?'Working…':'Sync now'}</button>}

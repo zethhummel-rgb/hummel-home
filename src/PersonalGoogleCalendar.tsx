@@ -85,7 +85,7 @@ export default function PersonalGoogleCalendar({householdId,userId,returnResult}
   <h3>My Google Calendar</h3>
   {(!testEnvironment||connection?.connected)&&!connection?.choices&&<p>{connection?.existingSource?
    <><strong>{connection.calendarName}</strong> · Syncing both ways</>:connection?.twoWay?.enabled?
-   'Add, edit or delete a one-time event on your connected calendar to update HH. This also works in Outlook when it shows that same Google calendar.':
+   'Edits and deletions to one-time events and supported repeating events sync both ways. This also works in Outlook when it shows the connected Google calendar.':
    connection?.connected?'Find the calendar HH created under My calendars in Google Calendar.':
    'See your household’s HH events on your connected Google calendar.'}</p>}
   {connection?.connected&&!connection.choices&&<span className="settings-connection"><i className="connected"/>{labels[connection.status]}</span>}
