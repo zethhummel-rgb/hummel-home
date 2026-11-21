@@ -157,8 +157,12 @@ async function run() {
         assert.equal(await feature.getAttribute('open'), null);
         await feature.locator('summary').click();
         const preview = feature.getByRole('img');
-        await preview.waitFor();
-        assert.ok(await preview.evaluate(async image => { await image.decode(); return image.naturalWidth > 0; }));
+        await preview.scrollIntoViewIfNeeded();
+        // A lazy image can be visible before Firefox starts its request.
+        await page.waitForFunction(() => {
+          const image = document.querySelector('.feature-details details[open] img');
+          return image?.complete && image.naturalWidth > 0;
+        });
         await feature.locator('summary').click();
       }
       await page.getByText('Using Google Calendar with HH', {exact: true}).click();
