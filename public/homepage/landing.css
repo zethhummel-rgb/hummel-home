@@ -193,6 +193,7 @@ h1, h2, h3 { margin: 0; font-family: var(--serif); color: var(--heading); }
   font-size: clamp(.99rem, 1.45vw, 1.12rem);
   line-height: 1.55;
 }
+.feature-copy .calendar-support { margin-top: 2px; font-size: .94rem; }
 .feature-art {
   grid-area: art;
   display: grid;

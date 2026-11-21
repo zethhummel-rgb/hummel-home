@@ -100,6 +100,15 @@ async function run() {
         await page.screenshot({path: path.join(out, 'public-home-first-' + width + '.png')});
         await page.screenshot({path: path.join(out, 'public-home-' + width + '.png'), fullPage: true});
       }
+      const syncLink = page.getByRole('link', {name: 'Sync with Google Calendar or Outlook'});
+      assert.equal(await syncLink.getAttribute('href'), './about.html#google');
+      if (width === 390) {
+        await syncLink.click();
+        await page.waitForURL(app + 'about.html#google');
+        await page.locator('#google summary').click();
+        assert.match(await page.locator('#google').innerText(), /Outlook sync uses a personal Microsoft account/);
+        await page.goBack({waitUntil: 'load'});
+      }
       await heroExplore.click();
       await page.waitForURL(app + 'about.html');
       await page.getByRole('heading', {name: 'Explore HH', exact: true}).waitFor();
@@ -165,9 +174,9 @@ async function run() {
         });
         await feature.locator('summary').click();
       }
-      await page.getByText('Using Google Calendar with HH', {exact: true}).click();
+      await page.getByText('Google Calendar and Outlook sync', {exact: true}).click();
       assert.equal(await page.getByRole('link', {name: 'Read about Google access and privacy'}).getAttribute('href'), './privacy.html#google-calendar');
-      await page.getByText('Using Google Calendar with HH', {exact: true}).click();
+      await page.getByText('Google Calendar and Outlook sync', {exact: true}).click();
       if (width === 390 || width === 1440) {
         await page.evaluate(() => scrollTo(0, 0));
         await page.screenshot({path: path.join(out, 'public-about-' + width + '.png'), fullPage: true});
