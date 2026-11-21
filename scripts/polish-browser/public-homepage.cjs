@@ -100,7 +100,7 @@ async function run() {
         await page.screenshot({path: path.join(out, 'public-home-first-' + width + '.png')});
         await page.screenshot({path: path.join(out, 'public-home-' + width + '.png'), fullPage: true});
       }
-      const syncLink = page.getByRole('link', {name: 'Sync with Google Calendar or Outlook'});
+      const syncLink = page.locator('.hero').getByRole('link', {name: 'Sync with Google Calendar or Outlook'});
       assert.equal(await syncLink.getAttribute('href'), './about.html#google');
       if (width === 390) {
         await syncLink.click();
