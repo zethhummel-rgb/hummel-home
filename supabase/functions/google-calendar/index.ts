@@ -18,6 +18,7 @@ const CALLBACK=PROJECT+'/functions/v1/google-calendar/callback';
 const personalConfig={app:APP,callback:CALLBACK,test:isTestProject,
  clientId:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_ID')||'':ID,
  clientSecret:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_SECRET')||'':SECRET};
+const personalGoogleConfigured=Boolean(personalConfig.clientId&&personalConfig.clientSecret);
 const admin=createClient(PROJECT,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
 const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
@@ -67,8 +68,8 @@ Deno.serve(async(req:Request)=>{
  }
  if(req.method==='GET'&&url.pathname.endsWith('/callback')){
   const state=url.searchParams.get('state');
-  if(state?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret)return personalCalendarCallback(url,APP);
-  if(state?.startsWith('hhi_'))return handleImportCallback(admin,url,personalConfig);
+  if(state?.startsWith('hhp_')&&personalGoogleConfigured)return personalCalendarCallback(url,APP);
+  if(state?.startsWith('hhi_')&&(!isTestProject||personalGoogleConfigured))return handleImportCallback(admin,url,personalConfig);
   if(isTestProject)return json({error:'External calendar connections are disabled in the test app.'},409);
   try{
    if(!state||state.length>200)return redirect(false,'Google connection expired. Please try connecting again.');
@@ -120,7 +121,10 @@ Deno.serve(async(req:Request)=>{
    return json(result);
   }
   if(isTestProject&&(b.action==='start'||b.action==='sync'))return json({error:'Legacy Google copy is disabled in the test app. Native calendars work normally.'},409);
-  if(typeof b.action==='string'&&b.action.startsWith('import_'))return json(await handleImportAction(admin,b,auth.data.user.id,personalConfig));
+  if(typeof b.action==='string'&&b.action.startsWith('import_')){
+   if(isTestProject&&!personalGoogleConfigured)return json({error:'Google import is disabled in the test app.'},409);
+   return json(await handleImportAction(admin,b,auth.data.user.id,personalConfig));
+  }
   const cutover=await transitionState(admin,b.householdId);
   if(transitionWriteBlocked(cutover)&&['start','sync','create','update','delete','transition_change'].includes(b.action))return json({error:'Your household transfer is in progress. Please wait a moment and refresh HH.'},409);
   const transition=await transitionConfig(admin,b.householdId);
