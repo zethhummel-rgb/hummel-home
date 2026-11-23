@@ -66,11 +66,12 @@ Deno.serve(async(req:Request)=>{
   }catch{return json({error:'The Google copy could not finish. HH plans are preserved.'},400)}
  }
  if(req.method==='GET'&&url.pathname.endsWith('/callback')){
-  if(url.searchParams.get('state')?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret)return personalCalendarCallback(url,APP);
+  const state=url.searchParams.get('state');
+  if(state?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret)return personalCalendarCallback(url,APP);
+  if(state?.startsWith('hhi_'))return handleImportCallback(admin,url,personalConfig);
   if(isTestProject)return json({error:'External calendar connections are disabled in the test app.'},409);
-  if(url.searchParams.get('state')?.startsWith('hhi_'))return handleImportCallback(admin,url,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP});
   try{
-   const state=url.searchParams.get('state');if(!state||state.length>200)return redirect(false,'Google connection expired. Please try connecting again.');
+   if(!state||state.length>200)return redirect(false,'Google connection expired. Please try connecting again.');
    const record=await service('state_take',{hash:await hash(state)});if(!record)return redirect(false,'Google connection expired. Please try connecting again.');
    if(url.searchParams.has('error'))return redirect(false,'Google Calendar permission was not granted.');
    const code=url.searchParams.get('code');if(!code||!ID||!SECRET)return redirect(false,'Google connection is not configured yet.');
@@ -118,8 +119,8 @@ Deno.serve(async(req:Request)=>{
    }
    return json(result);
   }
-  if(isTestProject&&(b.action==='start'||b.action==='sync'||typeof b.action==='string'&&b.action.startsWith('import_')))return json({error:'Google copy and import are disabled in the test app. Native calendars work normally.'},409);
-  if(typeof b.action==='string'&&b.action.startsWith('import_'))return json(await handleImportAction(admin,b,auth.data.user.id,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP}));
+  if(isTestProject&&(b.action==='start'||b.action==='sync'))return json({error:'Legacy Google copy is disabled in the test app. Native calendars work normally.'},409);
+  if(typeof b.action==='string'&&b.action.startsWith('import_'))return json(await handleImportAction(admin,b,auth.data.user.id,personalConfig));
   const cutover=await transitionState(admin,b.householdId);
   if(transitionWriteBlocked(cutover)&&['start','sync','create','update','delete','transition_change'].includes(b.action))return json({error:'Your household transfer is in progress. Please wait a moment and refresh HH.'},409);
   const transition=await transitionConfig(admin,b.householdId);
