@@ -18,16 +18,42 @@ test.select(false);assert.equal(prod.remember,true);
 const prodAccounts=createAccountSwitchStorage(prod,()=> 'p'),testAccounts=createAccountSwitchStorage(test,()=> 't','hh-test:');
 for(const email of ['zethhummel@gmail.com','hummelhomeapp@gmail.com'])assert.notEqual(prodAccounts.keyFor(email,true),testAccounts.keyFor(email,true));
 test.visit.setItem('hh:account-links:v1','test-only');assert.equal(prod.visit.getItem('hh:account-links:v1'),null);
-// Execute the actual test handlers; external integrations must be rejected before any fetch.
-async function edge(name,action,path=''){
+// Execute the TEST edge routes with no external requests.
+async function edge(name,action,path='',env={},handlers={}){
  let handler;const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{role:'owner',user_id:'tester'},error:null})};
  const admin={auth:{getUser:async()=>({data:{user:{id:'tester',email:'tester@example.invalid'}},error:null})},from:()=>q,rpc:async()=>({data:{nativeReady:true,googleConnected:false,copyStatus:'disconnected'},error:null})};
  const source=ts.transpileModule(read('supabase/functions/'+name+'/index.ts'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
- vm.runInNewContext(source,{exports:{},require:()=>new Proxy({createClient:()=>admin},{get:(obj,key)=>obj[key]||(()=>undefined)}),Deno:{env:{get:k=>({SUPABASE_URL:'https://ybizqfghnplcxlmlhvyn.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fake-key',HH_EMAIL_APP_PASSWORD:'fake-password-16',GOOGLE_CALENDAR_CLIENT_ID:'old-config',GOOGLE_CALENDAR_CLIENT_SECRET:'old-secret'})[k]},serve:f=>handler=f},URL,Response,Request,fetch:()=>{throw Error('External fetch must not happen')},console});
+ vm.runInNewContext(source,{exports:{},require:()=>new Proxy({createClient:()=>admin,...handlers},{get:(obj,key)=>obj[key]||(()=>undefined)}),Deno:{env:{get:k=>({SUPABASE_URL:'https://ybizqfghnplcxlmlhvyn.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fake-key',HH_EMAIL_APP_PASSWORD:'fake-password-16',GOOGLE_CALENDAR_CLIENT_ID:'old-config',GOOGLE_CALENDAR_CLIENT_SECRET:'old-secret',...env})[k]},serve:f=>handler=f},URL,Response,Request,fetch:()=>{throw Error('External fetch must not happen')},console});
  return handler(new Request('https://ybizqfghnplcxlmlhvyn.supabase.co/functions/v1/'+name+path,{method:path?'GET':'POST',headers:{origin:'https://zethhummel-rgb.github.io',authorization:'Bearer fake-session','content-type':'application/json'},...(!path?{body:JSON.stringify({action,householdId:'11111111-1111-4111-8111-111111111111',kind:'family',token:'a'.repeat(64)})}:{})}));
 }
 for(const action of ['start','sync','import_start','import_finish'])assert.equal((await edge('google-calendar',action)).status,409);
 assert.equal((await edge('google-calendar','', '/callback')).status,409);
+const testImportCallback='/callback?state=hhi_synthetic';
+assert.equal((await edge('google-calendar','',testImportCallback)).status,409);
+const testGoogleEnv={TEST_GOOGLE_CALENDAR_CLIENT_ID:'test-client',TEST_GOOGLE_CALENDAR_CLIENT_SECRET:'test-secret'};
+function assertTestImportConfig(config){
+ assert.equal(config.clientId,testGoogleEnv.TEST_GOOGLE_CALENDAR_CLIENT_ID);
+ assert.equal(config.clientSecret,testGoogleEnv.TEST_GOOGLE_CALENDAR_CLIENT_SECRET);
+ assert.equal(config.app,'https://zethhummel-rgb.github.io/hummel-home/');
+ assert.equal(config.callback,'https://ybizqfghnplcxlmlhvyn.supabase.co/functions/v1/google-calendar/callback');
+}
+const testImportHandlers={
+ handleImportAction(_admin,body,userId,config){
+  assertTestImportConfig(config);
+  assert.equal(userId,'tester');
+  assert.equal(body.action,'import_start');
+  return {configured:true};
+ },
+ handleImportCallback(_admin,url,config){
+  assertTestImportConfig(config);
+  assert.equal(url.searchParams.get('state'),'hhi_synthetic');
+  return new Response(null,{status:303,headers:{location:config.app}});
+ }
+};
+const configuredImport=await edge('google-calendar','import_start','',testGoogleEnv,testImportHandlers);
+assert.deepEqual(await configuredImport.json(),{configured:true});
+assert.equal((await edge('google-calendar','',testImportCallback,testGoogleEnv,testImportHandlers)).status,303);
+assert.equal((await edge('google-calendar','start','',testGoogleEnv)).status,409);
 for(const action of ['test','subscribe','dispatch'])assert.equal((await edge('event-reminders',action)).status,409);
 assert.equal((await edge('invitation-email','send')).status,409);assert.equal((await (await edge('invitation-email','status')).json()).configured,false);
 console.log('Staging checks passed: backend/host mismatch refusal, independent login storage and channels, account-switch isolation, server environment binding.');
