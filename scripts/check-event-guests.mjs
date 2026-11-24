@@ -100,8 +100,16 @@ try{
  assert.equal(eventHelpers.guestEvent(master,'2090-11-25'),null);
 
  for(let attempt=1;attempt<=4;attempt++){
-  const response=await test.request(invite,host);
+  const custom=attempt===1;
+  const response=await test.request(invite,custom?{...host,origin:'https://test.hhfamily.ca'}:host);
   assert.equal(response.status,200,await response.clone().text());
+  if(custom){
+   const link=new URL((await response.json()).preview.yes);
+   assert.equal(link.origin,'https://test.hhfamily.ca');
+   assert.equal(link.pathname,'/');
+   const token=new URLSearchParams(link.hash.slice(1)).get('event-invite');
+   assert.equal((await test.request({action:'preview',token},{origin:link.origin})).status,200);
+  }
   await test.request({...target,action:'revoke',id:(await list())[0].id},host);
  }
  await test.db.exec('reset role');
