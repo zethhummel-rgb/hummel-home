@@ -30,10 +30,22 @@ async function edge(name,action,path='',origin='https://zethhummel-rgb.github.io
  const source=ts.transpileModule(read('supabase/functions/'+name+'/index.ts'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
  const modules={
   './handler.ts':load(read('supabase/functions/event-addresses/handler.ts'),{Response,fetch:()=>{throw Error('External fetch must not happen')}}),
+  './import.ts':load(read('supabase/functions/google-calendar/import.ts'),{URL,URLSearchParams,Response,crypto,TextEncoder,require:()=>({})}),
   './personal.ts':load(read('supabase/functions/google-calendar/personal.ts'),{URL,URLSearchParams,Response}),
  };
  vm.runInNewContext(source,{exports:{},require:path=>modules[path]||new Proxy({createClient:()=>admin},{get:(obj,key)=>obj[key]||(()=>undefined)}),Deno:{env:{get:k=>({SUPABASE_URL:'https://ybizqfghnplcxlmlhvyn.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'fake-key',HH_EMAIL_APP_PASSWORD:'fake-password-16',GOOGLE_CALENDAR_CLIENT_ID:'old-config',GOOGLE_CALENDAR_CLIENT_SECRET:'old-secret',...env})[k]},serve:f=>handler=f},URL,URLSearchParams,Response,Request,fetch:()=>{throw Error('External fetch must not happen')},console});
  return handler(new Request('https://ybizqfghnplcxlmlhvyn.supabase.co/functions/v1/'+name+path,{method,headers:{origin,authorization:'Bearer fake-session','content-type':'application/json'},...(method==='POST'?{body:JSON.stringify({action,householdId:'11111111-1111-4111-8111-111111111111',kind:'family',token:'a'.repeat(64)})}:{})}));
+}
+for(const [marker,expected] of [['','https://zethhummel-rgb.github.io/hummel-home/'],['test_','https://test.hhfamily.ca/']]){
+ const state='hhi_'+marker+'a'.repeat(43);
+ const response=await edge('google-calendar','','/callback?'+new URLSearchParams({state,error:'access_denied'}),undefined,undefined,{
+  TEST_GOOGLE_CALENDAR_CLIENT_ID:'test',TEST_GOOGLE_CALENDAR_CLIENT_SECRET:'test',
+ });
+ assert.equal(response.status,303);
+ const target=new URL(response.headers.get('Location'));
+ assert.equal(target.origin+target.pathname,expected);
+ assert.equal(target.searchParams.get('calendar_import'),'error');
+ assert.equal(target.hash,'');
 }
 for(const name of ['invitation-registration','invitation-email','event-guests','request-pilot-invitation','send-feedback','admin-households','self-service-deletion','event-addresses','event-reminders','google-calendar','outlook-calendar']){
  for(const origin of ['https://zethhummel-rgb.github.io','https://test.hhfamily.ca']){
