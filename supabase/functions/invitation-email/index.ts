@@ -4,6 +4,7 @@ import {sendGmail} from './smtp.ts';
 const isTestProject=Deno.env.get('SUPABASE_URL')==='https://ybizqfghnplcxlmlhvyn.supabase.co';
 const testAppUrl='https://zethhummel-rgb.github.io/hummel-home/';
 const APP=(isTestProject?testAppUrl:Deno.env.get('APP_URL')||'https://zethhummel-rgb.github.io/hh-family/');
+export const invitationApp=isTestProject?'https://test.hhfamily.ca/':APP;
 const ORIGIN=new URL(APP).origin,FROM=Deno.env.get('HH_EMAIL_FROM')||'hummelhomeapp@gmail.com';
 const PASSWORD=(Deno.env.get('HH_EMAIL_APP_PASSWORD')||'').replaceAll(' ','');
 const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -34,7 +35,7 @@ Deno.serve(async(req:Request)=>{
   if(record.status==='cooldown')return json({error:'Wait one minute before retrying this invitation, or copy the link.'},429);
   if(record.status!=='claimed'||typeof record.claimId!=='string')throw Error('Invitation email storage is unavailable. Share the link or try again later.');
   claimId=record.claimId;
-  const message=invitationMessage({kind:body.kind as InviteKind,token:body.token,email:record.email,deliveryId:record.deliveryId,senderName:record.senderName,householdName:record.householdName,expiresAt:record.expiresAt},APP);
+  const message=invitationMessage({kind:body.kind as InviteKind,token:body.token,email:record.email,deliveryId:record.deliveryId,senderName:record.senderName,householdName:record.householdName,expiresAt:record.expiresAt},invitationApp);
   await sendGmail({from:FROM,to:record.email,password:PASSWORD,deliveryId:record.deliveryId,...message});
   try{await service('finish',{actorId,claimId,status:'sent'})}catch{/* Gmail accepted the email. Do not invite an automatic resend. */}
   return json({sent:true});
