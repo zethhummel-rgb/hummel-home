@@ -7,7 +7,7 @@ if(typeof location!=='undefined'){
  const fragment=new URLSearchParams(url.hash.slice(1));
  if(fragment.has('outlook_state')||fragment.has('outlook_code')){
   const state=fragment.get('outlook_state')||'',code=fragment.get('outlook_code')||'';
-  if(/^[A-Za-z0-9_-]{43}$/.test(state)&&code.length>0&&code.length<=4096)receipt={state,code};
+  if(/^(?:test_)?[A-Za-z0-9_-]{43}$/.test(state)&&code.length>0&&code.length<=4096)receipt={state,code};
   fragment.delete('outlook_state');
   fragment.delete('outlook_code');
   url.hash=fragment.toString();

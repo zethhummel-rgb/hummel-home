@@ -10,8 +10,7 @@ const from=Deno.env.get('HH_EMAIL_FROM')||'hummelhomeapp@gmail.com';
 const password=(Deno.env.get('HH_EMAIL_APP_PASSWORD')||'').replaceAll(' ','');
 const configured=(test||backend==='https://njpdqiwrwgoothkstoql.supabase.co')&&validMailAddress(from)&&password.length===16;
 const admin=createClient(backend,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const cors={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'content-type','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(body:unknown,status=200)=>Response.json(body,{status,headers:cors});
+const allowedOrigins=new Set(test?[origin,'https://test.hhfamily.ca']:[origin]);
 const invalid='Enter your name, a valid email address, and both answers.';
 const uncertain='Delivery could not be confirmed. Your answers are still here. You can email HH directly if you need to follow up.';
 
@@ -40,7 +39,10 @@ async function digest(value:string){
 }
 
 Deno.serve(async(request:Request)=>{
- if(request.headers.get('origin')!==origin)return json({error:'Invalid request origin.'},403);
+ const requestOrigin=request.headers.get('origin');
+ if(!requestOrigin||!allowedOrigins.has(requestOrigin))return Response.json({error:'Invalid request origin.'},{status:403,headers:{'Vary':'Origin','Cache-Control':'no-store'}});
+ const cors={'Access-Control-Allow-Origin':requestOrigin,'Access-Control-Allow-Headers':'content-type','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
+ const json=(body:unknown,status=200)=>Response.json(body,{status,headers:cors});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(request.method==='GET')return json({configured,preview:test&&!configured});
  if(request.method!=='POST')return json({error:'Method not allowed.'},405);

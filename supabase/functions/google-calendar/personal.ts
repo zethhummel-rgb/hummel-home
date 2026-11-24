@@ -1,7 +1,7 @@
 const scope='https://www.googleapis.com/auth/calendar.app.created';
 const existingScopes=['https://www.googleapis.com/auth/calendar.calendarlist.readonly','https://www.googleapis.com/auth/calendar.events'];
-const statePattern=/^hhp_[A-Za-z0-9_-]{43}$/;
-type Config={clientId:string;clientSecret:string;callback:string;app:string;test?:boolean};
+const statePattern=/^hhp_(?:test_)?[A-Za-z0-9_-]{43}$/;
+type Config={clientId:string;clientSecret:string;callback:string;app:string;test?:boolean;customTestOrigin?:boolean};
 type CalendarListEntry={id:string;name:string};
 const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const random=()=>encode(crypto.getRandomValues(new Uint8Array(32)));
@@ -47,7 +47,7 @@ export async function handlePersonalCalendar(admin:any,body:any,userId:string,co
   return existing('connect',{calendarId:body.calendarId,acknowledgeShared:true});
  }
  if(body.action==='personal_start'||(config.test&&['personal_existing_start','personal_two_way_copy_start'].includes(body.action))){
-  const state='hhp_'+random(),verifier=random();
+  const state=(config.customTestOrigin?'hhp_test_':'hhp_')+random(),verifier=random();
   const parameters={hash:await hash(state),verifier},useExisting=body.action==='personal_existing_start';
   if(config.test)await existing(useExisting?'start':body.action==='personal_two_way_copy_start'?'start_two_way_copy':'start_copy',parameters);
   else await service(admin,'state_create',{...actor,...parameters});

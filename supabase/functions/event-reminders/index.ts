@@ -7,8 +7,6 @@ const isTestProject=Deno.env.get('SUPABASE_URL')==='https://ybizqfghnplcxlmlhvyn
 const testAppUrl='https://zethhummel-rgb.github.io/hummel-home/';
 const APP=(isTestProject?testAppUrl:Deno.env.get('APP_URL')||'https://zethhummel-rgb.github.io/hh-family/'),ORIGIN=new URL(APP).origin;
 const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
 async function service(action:string,payload:Record<string,unknown>={}){const r=action==='claim'?await admin.rpc('calendar_reminder_claim',{payload}):await admin.rpc('push_service',{action,payload});if(r.error)throw Error('Notification storage is unavailable.');return r.data;}
 async function calendar(householdId:string){const r=await admin.rpc('calendar_service',{action:'connection_get',payload:{householdId}});if(r.error)throw Error('Calendar connection unavailable');return r.data;}
 async function publicKey(){return await service('config')||await service('config',{keys:webpush.generateVAPIDKeys()})}
@@ -93,6 +91,11 @@ async function dispatch(keys:any,householdId:string){
  }finally{await service('unlock_household',{householdId,...report})}
 }
 Deno.serve(async(req:Request)=>{
+ const origin=req.headers.get('origin');
+ const allowed=origin===ORIGIN||(isTestProject&&origin==='https://test.hhfamily.ca');
+ const cors={'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store',...(allowed&&origin?{'Access-Control-Allow-Origin':origin}:{})};
+ const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
+ if(req.method==='OPTIONS'&&!allowed)return json({error:'Invalid request origin'},403);
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
  if(isTestProject)return json({error:'External push delivery is disabled in the test app. Reminder schedules can still be tested.'},409);if(req.method!=='POST')return json({error:'Not found'},404);
  try{
@@ -109,7 +112,7 @@ Deno.serve(async(req:Request)=>{
    if(body.action!=='dispatch'||typeof body.householdId!=='string'||!/^[a-f0-9-]{36}$/.test(body.householdId))return json({error:'A household dispatch job is required'},400);
    return json(await dispatch(secrets.keys,body.householdId));
   }
-  if(req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+  if(!allowed)return json({error:'Invalid request origin'},403);
   const token=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!token)return json({error:'Sign in first'},401);
   const auth=await admin.auth.getUser(token);if(auth.error||!auth.data.user)return json({error:'Sign in again to enable reminders'},401);
   const raw=await req.text();if(raw.length>16000)return json({error:'Request too large'},400);const body=JSON.parse(raw);

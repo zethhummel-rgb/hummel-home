@@ -7,12 +7,14 @@ const APP=(isTestProject?testAppUrl:Deno.env.get('APP_URL')||'https://zethhummel
 const ORIGIN=new URL(APP).origin,FROM=Deno.env.get('HH_EMAIL_FROM')||'hummelhomeapp@gmail.com';
 const PASSWORD=(Deno.env.get('HH_EMAIL_APP_PASSWORD')||'').replaceAll(' ','');
 const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
+const allowedOrigins=new Set(isTestProject?[ORIGIN,'https://test.hhfamily.ca']:[ORIGIN]);
 const safeErrors=new Set(['Sign in with a confirmed account to send invitations','Choose a valid invitation','This invitation is unavailable, expired, or not yours to send','Invitation email limit reached. Share the link or try again later','This address has received several invitations. Share the link or try again later','Email sending is busy. Share the link or try again later']);
 async function service(action:string,payload:Record<string,unknown>){const r=await admin.rpc('invitation_mail_service',{action,payload});if(r.error)throw Error(safeErrors.has(r.error.message)?r.error.message:'Invitation email storage is unavailable. Share the link or try again later.');return r.data}
 Deno.serve(async(req:Request)=>{
- if(req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+ const requestOrigin=req.headers.get('origin');
+ if(!requestOrigin||!allowedOrigins.has(requestOrigin))return Response.json({error:'Invalid request origin'},{status:403,headers:{'Vary':'Origin','Cache-Control':'no-store'}});
+ const cors={'Access-Control-Allow-Origin':requestOrigin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
+ const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
  let actorId='',claimId='';

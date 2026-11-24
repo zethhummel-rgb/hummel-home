@@ -11,6 +11,7 @@ const isTestProject=Deno.env.get('SUPABASE_URL')==='https://ybizqfghnplcxlmlhvyn
 const testAppUrl='https://zethhummel-rgb.github.io/hummel-home/';
 const APP=(isTestProject?testAppUrl:Deno.env.get('APP_URL')||'https://zethhummel-rgb.github.io/hh-family/');
 const ORIGIN=new URL(APP).origin;
+const alternateTestOrigin=isTestProject?'https://test.hhfamily.ca':null;
 const PROJECT=Deno.env.get('SUPABASE_URL')!;
 const ID=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_ID')||'';
 const SECRET=isTestProject?'':Deno.env.get('GOOGLE_CALENDAR_CLIENT_SECRET')||'';
@@ -19,8 +20,6 @@ const personalConfig={app:APP,callback:CALLBACK,test:isTestProject,
  clientId:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_ID')||'':ID,
  clientSecret:isTestProject?Deno.env.get('TEST_GOOGLE_CALENDAR_CLIENT_SECRET')||'':SECRET};
 const admin=createClient(PROJECT,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const cors={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
 const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(b=>b.toString(16).padStart(2,'0')).join('');
 const base64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const random=()=>base64(crypto.getRandomValues(new Uint8Array(32)));
@@ -50,6 +49,12 @@ function fromGoogle(e:any){const all_day=!!e.start?.date;return {id:e.id,title:e
 const redirect=(ok:boolean,message='')=>{const u=new URL(APP);u.searchParams.set('calendar_connection',ok?'connected':'error');if(message)u.searchParams.set('calendar_message',message.slice(0,200));return Response.redirect(u,303)};
 Deno.serve(async(req:Request)=>{
  const url=new URL(req.url);
+ const origin=req.headers.get('origin');
+ const fromNewTestSite=Boolean(alternateTestOrigin&&origin===alternateTestOrigin);
+ const allowed=origin===ORIGIN||fromNewTestSite;
+ const cors={'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store',...(allowed&&origin?{'Access-Control-Allow-Origin':origin}:{})};
+ const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
+ if(req.method==='OPTIONS'&&!allowed)return json({error:'Invalid request origin'},403);
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
  if(req.method==='POST'&&req.headers.has('x-hummel-cron')){
   try{
@@ -66,7 +71,11 @@ Deno.serve(async(req:Request)=>{
   }catch{return json({error:'The Google copy could not finish. HH plans are preserved.'},400)}
  }
  if(req.method==='GET'&&url.pathname.endsWith('/callback')){
-  if(url.searchParams.get('state')?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret)return personalCalendarCallback(url,APP);
+  const state=url.searchParams.get('state');
+  if(state?.startsWith('hhp_')&&personalConfig.clientId&&personalConfig.clientSecret){
+   const returnApp=alternateTestOrigin&&/^hhp_test_[A-Za-z0-9_-]{43}$/.test(state)?alternateTestOrigin+'/':APP;
+   return personalCalendarCallback(url,returnApp);
+  }
   if(isTestProject)return json({error:'External calendar connections are disabled in the test app.'},409);
   if(url.searchParams.get('state')?.startsWith('hhi_'))return handleImportCallback(admin,url,{clientId:ID,clientSecret:SECRET,callback:CALLBACK,app:APP});
   try{
@@ -87,7 +96,7 @@ Deno.serve(async(req:Request)=>{
   }catch{return redirect(false,'Google Calendar could not finish connecting. Your existing household events are preserved.');}
  }
  if(req.method!=='POST')return json({error:'Not found'},404);
- if(req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+ if(!allowed)return json({error:'Invalid request origin'},403);
  let legacyLease='',legacyHousehold='';
  try{
   const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Sign in first'},401);
@@ -112,7 +121,7 @@ Deno.serve(async(req:Request)=>{
   }
   if(['personal_status','personal_start','personal_complete','personal_disconnect'].includes(b.action)||
     (isTestProject&&['personal_existing_start','personal_existing_connect','personal_existing_cancel','personal_two_way_copy_start'].includes(b.action))){
-   const result=await handlePersonalCalendar(admin,b,auth.data.user.id,personalConfig);
+   const result=await handlePersonalCalendar(admin,b,auth.data.user.id,{...personalConfig,customTestOrigin:fromNewTestSite});
    if(isTestProject&&b.action==='personal_status'&&'connected' in result&&result.connected){
     return json({...result,twoWay:await twoWay('status')});
    }

@@ -14,8 +14,7 @@ const from=Deno.env.get('HH_EMAIL_FROM')||'hummelhomeapp@gmail.com';
 const password=(Deno.env.get('HH_EMAIL_APP_PASSWORD')||'').replaceAll(' ','');
 const publishableKey=Deno.env.get('SUPABASE_ANON_KEY')!;
 const admin=createClient(backend,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const cors={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
+const allowedOrigins=new Set(test?[origin,'https://test.hhfamily.ca']:[origin]);
 const unavailable=()=>json({error:'This event invitation is unavailable or has expired.'},404);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const tokenPattern=/^[a-f0-9]{64}$/;
@@ -31,7 +30,10 @@ async function service(action:string,payload:Record<string,unknown>){
 }
 
 Deno.serve(async(req:Request)=>{
- if(req.headers.get('origin')!==origin)return json({error:'Invalid request origin.'},403);
+ const requestOrigin=req.headers.get('origin');
+ if(!requestOrigin||!allowedOrigins.has(requestOrigin))return Response.json({error:'Invalid request origin.'},{status:403,headers:{'Vary':'Origin','Cache-Control':'no-store'}});
+ const cors={'Access-Control-Allow-Origin':requestOrigin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
+ const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(req.method!=='POST')return json({error:'Method not allowed.'},405);
  if(!test&&!live)return json({error:'Event invitations are unavailable.'},503);

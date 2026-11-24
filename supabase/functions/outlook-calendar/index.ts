@@ -5,6 +5,7 @@ import {syncEvents} from './sync.ts';
 const project='https://ybizqfghnplcxlmlhvyn.supabase.co';
 const testSite='https://zethhummel-rgb.github.io/hummel-home/';
 const origin=new URL(testSite).origin;
+const customOrigin='https://test.hhfamily.ca';
 const endpoint=project+'/functions/v1/outlook-calendar';
 const callback=endpoint+'/callback';
 const microsoft='https://login.microsoftonline.com/consumers/oauth2/v2.0/';
@@ -15,11 +16,10 @@ const tester=Deno.env.get('TEST_OUTLOOK_TEST_EMAIL')?.trim().toLowerCase();
 const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const admin=Deno.env.get('SUPABASE_URL')===project&&serviceKey?
  createClient(project,serviceKey,{auth:{persistSession:false,autoRefreshToken:false}}):null;
-const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info',
- 'Access-Control-Allow-Methods':'POST, OPTIONS','Cache-Control':'no-store','Referrer-Policy':'no-referrer'};
-const reply=(data:unknown,status=200)=>Response.json(data,{status,headers});
+const headers={'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info',
+ 'Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store','Referrer-Policy':'no-referrer'};
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
-const secretPattern=/^[A-Za-z0-9_-]{43}$/;
+const secretPattern=/^(?:test_)?[A-Za-z0-9_-]{43}$/;
 const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/=+$/,'').replaceAll('+','-').replaceAll('/','_');
 const random=()=>encode(crypto.getRandomValues(new Uint8Array(32)));
 const digest=async(value:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));
@@ -49,19 +49,22 @@ function returnToSettings(request:Request) {
  const received=new URL(request.url);
  const state=received.searchParams.get('state')||'',code=received.searchParams.get('code')||'';
  const ok=secretPattern.test(state)&&code.length>0&&code.length<=4096&&!received.searchParams.has('error');
- const target=new URL(testSite);
+ const target=new URL(/^test_[A-Za-z0-9_-]{43}$/.test(state)?customOrigin+'/':testSite);
  target.searchParams.set('outlook_calendar',ok?'return':'denied');
  if(ok)target.hash=new URLSearchParams({outlook_state:state,outlook_code:code}).toString();
  return new Response(null,{status:303,headers:{...headers,Location:target.href}});
 }
 
 Deno.serve(async request=>{
- if(!admin)return reply({error:'Not found.'},404);
+ if(!admin)return Response.json({error:'Not found.'},{status:404,headers});
  const path=new URL(request.url).pathname;
  if(request.method==='GET'&&path.endsWith('/outlook-calendar/callback'))return returnToSettings(request);
  const requestOrigin=request.headers.get('origin');
- if(requestOrigin&&requestOrigin!==origin)return reply({error:'Not found.'},404);
- if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
+ const allowed=requestOrigin===origin||requestOrigin===customOrigin;
+ const cors={...headers,...(allowed&&requestOrigin?{'Access-Control-Allow-Origin':requestOrigin}:{})};
+ const reply=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
+ if((requestOrigin||request.method==='OPTIONS')&&!allowed)return reply({error:'Not found.'},404);
+ if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(request.method!=='POST'||!path.endsWith('/outlook-calendar'))return reply({error:'Not found.'},404);
  let body:Record<string,unknown>;
  try{
@@ -113,7 +116,7 @@ Deno.serve(async request=>{
    case 'status':
     return reply({available:true,...await db('status')});
    case 'authorize': {
-    const state=random(),verifier=random();
+    const state=(requestOrigin===customOrigin?'test_':'')+random(),verifier=random();
     await db('authorize',{stateHash:await hex(state),verifier});
     const authorize=new URL(microsoft+'authorize');
     authorize.search=new URLSearchParams({client_id:clientId!,response_type:'code',redirect_uri:callback,response_mode:'query',

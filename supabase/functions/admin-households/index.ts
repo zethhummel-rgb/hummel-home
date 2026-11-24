@@ -1,11 +1,13 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.118.0';
 const ORIGIN='https://zethhummel-rgb.github.io';
 const admin=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}});
-const headers={'Access-Control-Allow-Origin':ORIGIN,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
-const json=(value:unknown,status=200)=>Response.json(value,{status,headers});
+const isTest=Deno.env.get('SUPABASE_URL')==='https://ybizqfghnplcxlmlhvyn.supabase.co';
 const safe=new Set(['Admin access required','Unsupported admin request','Household no longer exists','Your admin household cannot be deleted','Type the exact household name to confirm','A pilot admin household cannot be deleted','A member owns another household']);
 Deno.serve(async(req:Request)=>{
- if(req.headers.get('origin')!==ORIGIN)return json({error:'Invalid request origin'},403);
+ const origin=req.headers.get('origin');
+ if(origin!==ORIGIN&&!(isTest&&origin==='https://test.hhfamily.ca'))return Response.json({error:'Invalid request origin'},{status:403});
+ const headers={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
+ const json=(value:unknown,status=200)=>Response.json(value,{status,headers});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
  try{
