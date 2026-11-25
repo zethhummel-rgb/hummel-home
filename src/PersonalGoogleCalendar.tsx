@@ -107,7 +107,8 @@ export default function PersonalGoogleCalendar({householdId,userId,returnResult,
     {connection.choices.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}
    </select>
    {!connection.choices.length&&<p>Google did not return a writable calendar available to connect.</p>}
-   <label className="google-calendar-sync-consent"><input type="checkbox" disabled={busy||!selected} checked={share} onChange={event=>setShare(event.target.checked)}/>Share ordinary events, notes, and locations from this calendar with everyone in my HH household. Edits and deletions can sync both ways.</label>
+   <label className="calendar-sync-consent"><input type="checkbox" disabled={busy||!selected} checked={share} onChange={event=>setShare(event.target.checked)}/><span>I agree to share eligible events from this calendar, including their times, notes and locations, with my HH household and any Outlook calendars connected to it.</span></label>
+   <p>Edits and deletions can sync both ways. <a href="./privacy.html#calendar-sharing" target="_blank" rel="noopener noreferrer">How HH shares calendar events</a></p>
    <button type="submit" className="button primary wide" disabled={busy||!selected||!share}>Start two-way sync</button>
    <button type="button" className="text-button" disabled={busy} onClick={()=>void finishExisting(true)}>Cancel Google connection</button>
   </form>}
@@ -124,7 +125,7 @@ export default function PersonalGoogleCalendar({householdId,userId,returnResult,
     <button type="button" className="button soft" disabled={busy} onClick={()=>void updateTwoWay()}>Sync now</button>{' '}
     {!connection.existingSource&&<button type="button" className="text-button" disabled={busy} onClick={()=>void updateTwoWay(false)}>Turn off two-way sync</button>}
    </>:<>
-    <p>Changes from this Google calendar can update or remove shared HH events.</p>
+    <p>Changes from this Google calendar can update or remove shared HH events. Eligible events added in Google can also appear on Outlook calendars connected to your HH household.</p>
     <button type="button" className="button soft" disabled={busy} onClick={()=>void updateTwoWay(true)}>Enable two-way sync</button>
    </>}
   </div>}
