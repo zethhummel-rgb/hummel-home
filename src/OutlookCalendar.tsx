@@ -17,6 +17,7 @@ export default function OutlookCalendar({householdId,userId,returned,onSetupComp
  householdId:string;userId:string;returned?:'return'|'denied';onSetupComplete?:()=>void;onSetupCancel?:()=>void;
 }){
  const [status,setStatus]=useState<Status|null>(null),[selected,setSelected]=useState('');
+ const [share,setShare]=useState(false);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const pickerId=useId();
  const pending=useRef(false);
@@ -55,8 +56,8 @@ export default function OutlookCalendar({householdId,userId,returned,onSetupComp
     return;
    }
    setStatus(await request('status'));
-   if(action==='create_family'){setSelected(result.calendarId);setNotice('HH Family is selected. Start syncing to finish setup.')}
-   if(action==='connect'||action==='cancel_picker'||action==='disconnect')setSelected('');
+   if(action==='create_family'){setSelected(result.calendarId);setShare(false);setNotice('HH Family is selected. Confirm sharing to finish setup.')}
+   if(action==='connect'||action==='cancel_picker'||action==='disconnect'){setSelected('');setShare(false)}
    if(action==='connect'){
     setNotice('Outlook calendar connected for two-way sync.');
     onSetupComplete?.();
@@ -76,21 +77,23 @@ export default function OutlookCalendar({householdId,userId,returned,onSetupComp
   <h3>Outlook Calendar</h3>
   {choices?<div className="calendar-setup-picker">
    <p className="settings-connection"><i className="connected"/>Signed in to Microsoft</p>
-   <form onSubmit={event=>{event.preventDefault();if(destination)void run('connect',{calendarId:destination.id,importEvents:true})}}>
+   <form onSubmit={event=>{event.preventDefault();if(destination&&share)void run('connect',{calendarId:destination.id,importEvents:true})}}>
     <p>{status.calendarName?<>Choose <strong>{status.calendarName}</strong> again to reconnect.</>:
      'Create an HH Family calendar or choose an Outlook calendar you already use.'}</p>
     {!status.calendarName&&familyCalendars.length<2&&<button type="button" className="button soft wide calendar-setup-family"
      disabled={busy||familyCalendars[0]?.id===selected} onClick={()=>{
-      if(familyCalendars.length){setSelected(familyCalendars[0].id);setNotice('HH Family is selected. Start syncing to finish setup.')}
+      if(familyCalendars.length){setSelected(familyCalendars[0].id);setShare(false);setNotice('HH Family is selected. Confirm sharing to finish setup.')}
       else void run('create_family');
      }}>{familyCalendars.length?'Use HH Family calendar':'Create HH Family calendar'}</button>}
     <label htmlFor={pickerId}>Outlook calendar</label>
-    <select id={pickerId} required value={selected} disabled={busy} onChange={event=>{setSelected(event.target.value);setNotice('')}}>
+    <select id={pickerId} required value={selected} disabled={busy} onChange={event=>{setSelected(event.target.value);setShare(false);setNotice('')}}>
      <option value="">{choices.length?'Choose an Outlook calendar':'Create HH Family to continue'}</option>
      {choices.map(choice=><option key={choice.id} value={choice.id}>{choice.name}</option>)}
     </select>
-    <p className="settings-caption">Everyone in your HH household can see synced events, notes and locations from <strong>{destination?.name??'the selected calendar'}</strong>. Add, edit, or delete events in either app.</p>
-    <button type="submit" className="button primary wide" disabled={busy||!destination}>Start two-way sync</button>
+    <p className="settings-caption">Your household can see eligible events from <strong>{destination?.name??'the selected calendar'}</strong>, including their times, notes and locations. Microsoft receives eligible HH events, including events shared from Google Calendar. People who can see this Outlook calendar may see those events.</p>
+    <label className="calendar-sync-consent"><input type="checkbox" disabled={busy||!destination} checked={share} onChange={event=>setShare(event.target.checked)}/><span>I agree to share eligible events between this Outlook calendar and my HH household, including any Google calendars connected to it.</span></label>
+    <p>Edits and deletions can sync both ways. <a href="./privacy.html#calendar-sharing" target="_blank" rel="noopener noreferrer">How HH shares calendar events</a></p>
+    <button type="submit" className="button primary wide" disabled={busy||!destination||!share}>Start two-way sync</button>
    </form>
    <button type="button" className="text-button" disabled={busy} onClick={()=>void run('cancel_picker')}>Cancel Outlook setup</button>
   </div>:<>

@@ -20,11 +20,13 @@ export default function CalendarSetupChoices({onChoose,disabled}:{
  ];
  return <div className="calendar-setup-options" role="group" aria-label="Two-way Google Calendar sync" aria-describedby={id}>
   <p id={id}>{description}</p>
+  <p id={id+'-sharing'}>Eligible events added in Google are shared with your HH household and can also appear on an Outlook calendar connected to your household, including one connected by another member.</p>
   {options.map(({calendar,Icon,title,description})=><button type="button" className="calendar-setup-option"
-   key={calendar} aria-labelledby={id+calendar} aria-describedby={id+calendar+'-description'} disabled={disabled} onClick={()=>onChoose(calendar)}>
+   key={calendar} aria-labelledby={id+calendar} aria-describedby={id+calendar+'-description '+id+'-sharing'} disabled={disabled} onClick={()=>onChoose(calendar)}>
    <Icon size={19} aria-hidden="true"/>
    <span><strong id={id+calendar}>{title}</strong><small id={id+calendar+'-description'}>{description}</small></span>
    <ArrowRight size={17} aria-hidden="true"/>
   </button>)}
+  <a className="text-button" href="./privacy.html#calendar-sharing" target="_blank" rel="noopener noreferrer">How HH shares calendar events</a>
  </div>;
 }
