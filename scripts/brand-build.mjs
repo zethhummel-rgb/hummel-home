@@ -5,6 +5,7 @@ if(process.env.VITE_APP_ENV==='test'){
  fs.writeFileSync(path,JSON.stringify(manifest,null,2));
  const index='dist/index.html';fs.writeFileSync(index,fs.readFileSync(index,'utf8').replace(/<title>.*?<\/title>/,'<title>HH Test — Humble Home App</title>'));
  fs.copyFileSync('test-support/about.html','dist/about.html');
+ fs.copyFileSync('test-support/_headers','dist/_headers');
 }else{
  // Test-only instructions and fixtures must never appear in a production build.
  fs.rmSync('dist/test-guide.html',{force:true});
