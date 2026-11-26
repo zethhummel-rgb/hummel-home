@@ -5,6 +5,7 @@ import {
   adminClient, createPilotInvitation, familyAppUrl, getAdminStatus, getDashboard,
   pilotInvitationUrl, sendPilotInvitation, type DashboardSnapshot, type PilotInvitation,
 } from './api';
+import ContentPanel from './ContentPanel';
 import './styles.css';
 
 const logo = new URL('./icons/hh-192.png', familyAppUrl).href;
@@ -61,7 +62,7 @@ function HHAdmin() {
         <a className="home-link" href={familyAppUrl.href}>Open HH <span aria-hidden="true">↗</span></a>
       </div>
     </header>
-    {gate === 'ready' && <Dashboard signOut={signOut} />}
+    {gate === 'ready' && <AdminWorkspace signOut={signOut} />}
     {gate === 'verify' && <VerifyAdmin onVerified={openSession} signOut={signOut} />}
     {gate === 'sign-in' && <SignIn onSignedIn={openSession} notice={notice} clearNotice={() => setNotice('')} />}
     {gate === 'loading' && <main className="auth-card"><p role="status">Checking admin access…</p></main>}
@@ -215,7 +216,35 @@ function Status({value}: {value: InviteStatus | 'New'}) {
 
 const emailStatus: Record<string, string> = {sent: 'Email submitted', sending: 'Email sending', failed: 'Email unconfirmed'};
 
-function Dashboard({signOut}: {signOut: () => Promise<void>}) {
+const adminViews = [
+  {id: 'pilot', label: 'Pilot access'},
+  {id: 'notices', label: 'Notices & updates'},
+  {id: 'palettes', label: 'Seasonal palettes'},
+] as const;
+type AdminView = typeof adminViews[number]['id'];
+
+function AdminWorkspace({signOut}: {signOut: () => Promise<void>}) {
+  const [view, setView] = useState<AdminView>('pilot');
+  const [contentView, setContentView] = useState<'notices' | 'palettes'>();
+  const [error, setError] = useState('');
+  return <main className="shell dashboard">
+    <div className="dashboard-heading">
+      <h1>{adminViews.find((tab) => tab.id === view)?.label}</h1>
+      <button type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}>Sign out</button>
+    </div>
+    <nav className="admin-navigation" aria-label="Admin Dashboard">
+      {adminViews.map((tab) => <button type="button" key={tab.id} aria-current={tab.id === view ? 'page' : undefined} onClick={() => {
+        setView(tab.id);
+        if (tab.id !== 'pilot') setContentView(tab.id);
+      }}>{tab.label}</button>)}
+    </nav>
+    {error && <p className="message error" role="alert">{error}</p>}
+    <div hidden={view !== 'pilot'}><Dashboard /></div>
+    {contentView && <div hidden={view === 'pilot'}><ContentPanel view={contentView} /></div>}
+  </main>;
+}
+
+function Dashboard() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>();
   const [email, setEmail] = useState('');
   const [selection, setSelection] = useState<'requests' | 'invitations'>('requests');
@@ -288,12 +317,7 @@ function Dashboard({signOut}: {signOut: () => Promise<void>}) {
     if (!current || current === 'Expired' || status === 'Accepted') invitationsByEmail.set(invite.email.toLowerCase(), status);
   }
 
-  return <main className="shell dashboard">
-    <div className="dashboard-heading">
-      <h1>Pilot access</h1>
-      <button type="button" onClick={() => void signOut().catch((error: Error) => setLoadError(error.message))}>Sign out</button>
-    </div>
-    <div className="workspace">
+  return <div className="workspace">
       <aside className="panel composer" aria-labelledby="invite-heading">
         <h2 id="invite-heading">Send an invitation</h2>
         {snapshot && <p className="capacity">{snapshot.capacity.used} of {snapshot.capacity.total} pilot places reserved</p>}
@@ -380,8 +404,7 @@ function Dashboard({signOut}: {signOut: () => Promise<void>}) {
           </ul>
         </>}
       </section>
-    </div>
-  </main>;
+    </div>;
 }
 
 createRoot(document.getElementById('root')!).render(<HHAdmin />);

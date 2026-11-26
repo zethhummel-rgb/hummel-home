@@ -11,7 +11,7 @@ import PilotInvites from './PilotInvites';
 import AdminHouseholds from './AdminHouseholds';
 import DeletionSettings from './DeletionSettings';
 import Tutorials from './Tutorials';
-import {PALETTES} from './palettes';
+import {paletteById,type SeasonalPaletteId} from './palettes';
 import {isCurrentAuthClient,supabase,staySignedIn} from './supabase';
 import AccountSwitcher from './AccountSwitcher';
 import {accountSwitchEligible,hasSavedSwitchAccount} from './accountSwitch';
@@ -30,7 +30,7 @@ type Props={
  onInteractiveStart?:(id:string)=>void;
  initialPage?:'main'|'help'|'notifications'|'googleImport'|'household'|'feedback'|'calendar';importError?:string;personalCalendarReturn?:'return'|'denied';outlookCalendarReturn?:'return'|'denied';onCalendarImported:()=>unknown;initialGuide?:'install';onGettingStarted:()=>void;
  name:string;email:string;userId:string;householdId:string;householdName:string;owner:boolean;members:Member[];people:HouseholdPerson[];
- paletteId:string;paletteMessage:string;onPaletteChange:(id:string)=>void;onColorSaved:(color:string)=>void;onHouseholdSaved:()=>unknown;
+ paletteId:string;paletteMessage:string;seasonalPalettes:readonly SeasonalPaletteId[];onPaletteChange:(id:string)=>void;onColorSaved:(color:string)=>void;onHouseholdSaved:()=>unknown;
  calendarConnected:boolean;calendarLegacy:boolean;calendarTransition?:boolean;calendarCopyMessage:string;calendarConfigured:boolean;onOpenCalendar:()=>void;onConnectGoogle:()=>void;onWelcome:()=>void;onClose:()=>void;onSignOut:()=>unknown;
 };
 function Row({icon,title,detail,onClick}:{icon:ReactNode;title:string;detail?:string;onClick:()=>void}){
@@ -39,7 +39,7 @@ function Row({icon,title,detail,onClick}:{icon:ReactNode;title:string;detail?:st
 export default function SettingsDialog(props:Props){return <DraftScope><SettingsDialogBody {...props}/></DraftScope>}
 function SettingsDialogBody(props:Props){
  const drafts=useDraftGroup()!;useModalScrollLock();
- const {initialPage='main',onInteractiveStart,importError,personalCalendarReturn,outlookCalendarReturn,onCalendarImported,initialGuide,onGettingStarted,name,email,userId,householdId,householdName,owner,members,people,paletteId,paletteMessage,onPaletteChange,onColorSaved,onHouseholdSaved,calendarConnected,calendarLegacy,calendarTransition=false,calendarCopyMessage,calendarConfigured,onOpenCalendar,onConnectGoogle,onWelcome,onClose,onSignOut}=props;
+ const {initialPage='main',onInteractiveStart,importError,personalCalendarReturn,outlookCalendarReturn,onCalendarImported,initialGuide,onGettingStarted,name,email,userId,householdId,householdName,owner,members,people,paletteId,paletteMessage,seasonalPalettes,onPaletteChange,onColorSaved,onHouseholdSaved,calendarConnected,calendarLegacy,calendarTransition=false,calendarCopyMessage,calendarConfigured,onOpenCalendar,onConnectGoogle,onWelcome,onClose,onSignOut}=props;
  const [history,setHistory]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[visited,setVisited]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[host,setHost]=useState(false),[leaving,setLeaving]=useState(false),[error,setError]=useState('');
  const [profileDirty,setProfileDirty]=useState(false);
  const [feedbackDirty,setFeedbackDirty]=useState(false),[draftRevision,setDraftRevision]=useState(0);
@@ -52,7 +52,7 @@ function SettingsDialogBody(props:Props){
  const page=history.at(-1)!,dialog=useRef<HTMLElement>(null),heading=useRef<HTMLHeadingElement>(null),content=useRef<HTMLDivElement>(null);
  const pageRef=useRef(page),closeRef=useRef(onClose),leavingRef=useRef(leaving);pageRef.current=page;closeRef.current=closeSettings;leavingRef.current=leaving;
  const initials=name.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toUpperCase();
- const member=members.find(m=>m.user_id===userId),palette=PALETTES.find(p=>p.id===paletteId)||PALETTES[0];
+ const member=members.find(m=>m.user_id===userId),palette=paletteById(paletteId);
  const peopleCount=members.length+people.filter(p=>!p.linked_user_id).length;
  const canSwitchAccounts=accountSwitchEligible(email);
  const [pairedAccount,setPairedAccount]=useState(()=>canSwitchAccounts&&hasSavedSwitchAccount(userId,email));
@@ -117,7 +117,7 @@ function SettingsDialogBody(props:Props){
    </>)}
    {canSwitchAccounts&&page==='accounts'&&<AccountSwitcher key={userId} userId={userId} email={email} onBusy={busy=>{leavingRef.current=busy;setLeaving(busy)}} onProfile={()=>open('profile')} onSavedState={setPairedAccount}/>}
    {screen('profile',<><div className="settings-page-intro"><UserRound size={25}/><p>Your own account, with one shared home.</p></div><dl className="settings-profile-details"><div><dt>Name</dt><dd>{name}</dd></div><div><dt>Email</dt><dd>{email}</dd></div><div><dt>Role</dt><dd>{owner?'Household owner':'Family member'}</dd></div></dl><ProfileName name={name} userId={userId} householdId={householdId} onSaved={onHouseholdSaved} onDirty={setProfileDirty} onBusy={busy=>{leavingRef.current=busy;setLeaving(busy)}}/><div className="settings-detail-card"><MyCalendarColor member={member} householdId={householdId} userId={userId} onSaved={onColorSaved}/></div>{owner?<p className="settings-caption">To delete your account and entire home, open <button type="button" className="text-button" onClick={()=>open('household')}>Your household</button>.</p>:<DeletionSettings owner={false} email={email} householdId={householdId} householdName={householdName} protectedAccount={host} onBusy={busy=>{leavingRef.current=busy;setLeaving(busy)}}/>}</>)}
-   {screen('appearance',<><p className="settings-page-description">Choose a look for HH. Your selection saves automatically on this device.</p><div className="settings-detail-card"><PaletteSettings value={paletteId} onChange={onPaletteChange} message={paletteMessage}/></div></>)}
+   {screen('appearance',<><p className="settings-page-description">Choose a look for HH. Your selection saves automatically on this device.</p><div className="settings-detail-card"><PaletteSettings value={paletteId} onChange={onPaletteChange} message={paletteMessage} seasons={seasonalPalettes}/></div></>)}
    {screen('feedback',<Feedback onDirty={setFeedbackDirty} key={userId+householdId} userId={userId} householdId={householdId} onBusy={busy=>{leavingRef.current=busy;setLeaving(busy)}}/>)}
    {screen('notifications',<div className="settings-detail-card"><NotificationSettings householdId={householdId} userId={userId}/></div>)}
    {screen('household',<><div className="settings-page-intro"><House size={25}/><p>{owner?'Manage your home and the people who share it.':'The people sharing your home. Your household owner manages invitations and profiles.'}</p></div><div className="settings-detail-card"><FamilySettings householdName={householdName} people={people} onHouseholdSaved={onHouseholdSaved} owner={owner} members={members} householdId={householdId}/></div>{owner&&<DeletionSettings owner email={email} householdId={householdId} householdName={householdName} protectedAccount={host} onBusy={busy=>{leavingRef.current=busy;setLeaving(busy)}}/>}</>)}

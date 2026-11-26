@@ -18,6 +18,8 @@ const as=async(role,aal='aal1')=>{
 const asService=async()=>db.exec('reset role;set role service_role;');
 const status=()=>value('select public.hh_admin_status()');
 const dashboard=(action,payload={})=>value('select public.hh_admin_dashboard($1,$2)',[action,payload]);
+const content=(action,payload={})=>value('select public.hh_admin_content($1,$2)',[action,payload]);
+const memberContent=()=>value('select public.hh_member_content()');
 const mail=(action,payload)=>value('select public.invitation_mail_service($1,$2)',[action,payload]);
 const request=(action,payload)=>value('select public.pilot_request_mail_service($1,$2)',[action,payload]);
 
@@ -31,7 +33,7 @@ try{
  for(const name of ['schema','calendar','member-colours','pilot','pilot-seven-spots','pilot-fourteen-spots','invitation-email']){
   await db.exec(read(`database/${name}.sql`));
  }
- for(const name of ['20261110151437_hh_one_email_invitations','20261112181000_hh_pilot_request_mail','20261126210000_hh_site_admin_dashboard']){
+ for(const name of ['20261110151437_hh_one_email_invitations','20261112181000_hh_pilot_request_mail','20261126210000_hh_site_admin_dashboard','20261126213000_hh_admin_content']){
   await db.exec(read(`supabase/migrations/${name}.sql`));
  }
  for(const [role,id] of Object.entries(roles))await db.query('insert into auth.users values($1,$2,now())',[id,email(role)]);
@@ -139,6 +141,69 @@ try{
  assert.ok(await value("select public.create_pilot_household($1,'Dashboard Invite Home','Invitee')",[token]));
  await assert.rejects(value("select public.create_pilot_household($1,'Replay','Invitee')",[token]));
 
+ const memo={id:uid(20),kind:'notice',title:' Community notice ',body:'Next weekend\nBring your calendar. '};
+ const release={id:uid(21),kind:'update',title:'What’s new',body:'New colors are available.'};
+ const emptyContent={notices:[],seasonal_palettes:[]};
+ assert.deepEqual(await memberContent(),emptyContent);
+ await assert.rejects(content('publish_notice',memo),/Admin access required/);
+ await assert.rejects(value('select * from private.hh_app_notices'),/permission denied/);
+ await assert.rejects(value('select * from private.hh_seasonal_palettes'),/permission denied/);
+ await assert.rejects(value('select private.hh_content_snapshot(true)'),/permission denied/);
+ await as('host');
+ assert.deepEqual(await memberContent(),emptyContent);
+ await assert.rejects(content('publish_notice',memo),/Verify your second factor/);
+ await assert.rejects(content('set_palette',{palette:'spring',enabled:true}),/Verify your second factor/);
+ await as('admin','aal2');
+ await assert.rejects(memberContent(),/Confirmed household membership required/);
+ assert.deepEqual(await content('snapshot'),emptyContent);
+ await assert.rejects(content('publish_notice',{...memo,id:'broken'}),/Choose a valid notice/);
+ await assert.rejects(content('publish_notice',{...memo,kind:'email'}),/Choose notice or update/);
+ await assert.rejects(content('publish_notice',{...memo,title:'a'.repeat(101)}),/Enter a title/);
+ await assert.rejects(content('publish_notice',{...memo,body:'\n\t  \r\n'}),/Enter a message/);
+ await assert.rejects(content('publish_notice',{...memo,body:'a'.repeat(2001)}),/Enter a message/);
+ await assert.rejects(content('set_palette',{palette:'blush',enabled:true}),/Choose a seasonal palette/);
+ await assert.rejects(content('set_palette',{palette:'spring',enabled:'true'}),/Choose a seasonal palette/);
+ const initialNotice=(await content('publish_notice',memo)).notices[0];
+ assert.deepEqual(Object.keys(initialNotice).sort(),['archived_at','body','id','kind','published_at','title']);
+ assert.equal(initialNotice.title,'Community notice');
+ assert.equal(initialNotice.body,'Next weekend\nBring your calendar.');
+ assert.equal(initialNotice.archived_at,null);
+ assert.deepEqual((await content('publish_notice',memo)).notices,[initialNotice]);
+ await assert.rejects(content('publish_notice',{...memo,title:'Different'}),/already published with different content/);
+ assert.equal((await content('publish_notice',release)).notices.length,2);
+ assert.deepEqual((await content('set_palette',{palette:'winter',enabled:true})).seasonal_palettes,['winter']);
+ assert.deepEqual((await content('set_palette',{palette:'spring',enabled:true})).seasonal_palettes,['spring','winter']);
+ assert.deepEqual((await content('set_palette',{palette:'spring',enabled:true})).seasonal_palettes,['spring','winter']);
+
+ await as('owner');
+ const ownerContent=await memberContent();
+ assert.deepEqual(ownerContent.seasonal_palettes,['spring','winter']);
+ assert.deepEqual(ownerContent.notices.map(row=>row.kind).sort(),['notice','update']);
+ assert.deepEqual(Object.keys(ownerContent.notices[0]).sort(),['body','id','kind','published_at','title']);
+ await assert.rejects(content('snapshot'),/Admin access required/);
+ await as('invitee');
+ assert.deepEqual(await memberContent(),ownerContent);
+ await as('host','aal2');
+ const archived=(await content('archive_notice',{id:memo.id})).notices.find(row=>row.id===memo.id);
+ assert.ok(archived.archived_at);
+ assert.deepEqual((await content('archive_notice',{id:memo.id})).notices.find(row=>row.id===memo.id),archived);
+ assert.deepEqual((await content('publish_notice',memo)).notices.find(row=>row.id===memo.id),archived);
+ await assert.rejects(content('archive_notice',{id:uid(22)}),/Notice no longer exists/);
+ await as('secondAdmin','aal2');
+ assert.deepEqual((await content('set_palette',{palette:'winter',enabled:false})).seasonal_palettes,['spring']);
+ await as('owner');
+ assert.deepEqual((await memberContent()).notices.map(row=>row.id),[release.id]);
+ assert.deepEqual((await memberContent()).seasonal_palettes,['spring']);
+ await as('unapprovedAlias','aal2');
+ await assert.rejects(memberContent(),/Confirmed household membership required/);
+ await assert.rejects(content('archive_notice',{id:release.id}),/Admin access required/);
+ await db.exec('reset role;');
+ await db.query('update auth.users set email_confirmed_at=null where id=$1',[roles.owner]);
+ await as('owner');
+ await assert.rejects(memberContent(),/Confirmed household membership required/);
+ await db.exec('reset role;');
+ await db.query('update auth.users set email_confirmed_at=now() where id=$1',[roles.owner]);
+
  await as('admin','aal2');
  const snapshot=await dashboard('snapshot');
  assert.deepEqual(snapshot.capacity,{used:2,total:14});
@@ -169,6 +234,8 @@ try{
  await db.exec('reset role;set role anon;');
  await assert.rejects(status(),/permission denied/);
  await assert.rejects(dashboard('snapshot'),/permission denied/);
+ await assert.rejects(content('snapshot'),/permission denied/);
+ await assert.rejects(memberContent(),/permission denied/);
 
  await db.exec('reset role;');
  await db.query("update private.pilot_request_delivery set created_at=now()-interval '8 days' where id in ($1,$2)",[submission.id,preview.id]);
@@ -186,6 +253,7 @@ try{
  assert.equal((await status()).is_admin,false);
  await assert.rejects(dashboard('create_invite',{email:email('invitee')}),/Admin access required/);
  console.log('HH admin database checks passed: exact identity grants, existing host access and separate MFA, shared pilot seats and mail claims, old and new invitation redemption, atomic request capture, preview, deduplication and expiry.');
+ console.log('HH content checks passed: confirmed household-reader scope, explicit admin publication, idempotent retries, archives, seasonal availability, and restricted database grants.');
 }finally{
  await db.close();
 }

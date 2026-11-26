@@ -2,7 +2,7 @@ import {useEffect,useLayoutEffect,useState} from 'react';
 
 const shades=['bg','surface','panel','field','tint','selected','hover','line','line-strong','ink','heading','muted','subtle','accent','accent-hover','focus','decoration','shadow'] as const;
 type Shade=typeof shades[number];
-type Palette={id:string;name:string;description:string;swatches:string[];colours?:Record<Shade,string>};
+export type Palette={id:string;name:string;description:string;swatches:string[];colours?:Record<Shade,string>};
 function colours(values:string[]):Record<Shade,string>{return Object.fromEntries(shades.map((shade,i)=>[shade,values[i]])) as Record<Shade,string>}
 
 export const PALETTES:Palette[]=[
@@ -14,7 +14,19 @@ export const PALETTES:Palette[]=[
  {id:'ivory',name:'Classic Ivory',description:'Warm whites and charcoal',swatches:['#EEECE5','#56544D','#B38B50'],colours:colours(['#FAF9F5','#FFFFFC','#FCFBF8','#FFFEFA','#F1EFE8','#E8E5DA','#F6F4EE','#E4E1D7','#C9C4B5','#383832','#44443D','#6C6B62','#77766C','#56544D','#414038','#9C9787','#B9B4A5','#383832'])},
 ];
 
+const SEASONS=['spring','summer','autumn','winter'] as const;
+export type SeasonalPaletteId=typeof SEASONS[number];
+export const SEASONAL_PALETTES:Record<SeasonalPaletteId,Palette>={
+ spring:{id:'spring',name:'Spring Garden',description:'Fresh greens and soft cream',swatches:['#E8F0DF','#43664B','#CBAC65'],colours:colours(['#F6F9F2','#FEFFFC','#F9FBF5','#FCFEFA','#E8F0DF','#DCE9D1','#EFF5E8','#D8E4D1','#B6C7AE','#293E2F','#314C37','#4F6552','#566B55','#43664B','#35543C','#597D5C','#A0B494','#283B2B'])},
+ summer:{id:'summer',name:'Summer Shore',description:'Sea glass and warm sand',swatches:['#E2EFE8','#35645E','#C59B57'],colours:colours(['#FAF8F0','#FFFEFA','#FBFAF3','#FFFDF7','#E2EFE8','#D5E9E0','#EEF5EC','#D1E1D8','#B3C9BE','#263E3A','#284B44','#526662','#586D68','#35645E','#2A514B','#5B8279','#A0B9AD','#293F39'])},
+ autumn:{id:'autumn',name:'Autumn Harvest',description:'Toasted copper and oatmeal',swatches:['#F1E4D5','#875642','#BE914C'],colours:colours(['#FAF6EF','#FFFCF8','#FBF7F0','#FFFDF8','#F1E4D5','#EBD8C7','#F6EDE2','#E7D8CA','#D5BBA8','#46352D','#563C31','#70594D','#756052','#875642','#704434','#A3745E','#C2A08B','#433129'])},
+ winter:{id:'winter',name:'Winter Pine',description:'Evergreen and frosted blue',swatches:['#E4EEEF','#355A54','#AABFC3'],colours:colours(['#F4F8F8','#FCFFFF','#F6FBFB','#FCFEFE','#E4EEEF','#D9E8E8','#EEF5F5','#D8E4E5','#B4C8CB','#293E43','#2A4849','#50666A','#596E72','#355A54','#284741','#608783','#A1B9BC','#273D42'])},
+};
+
+export function isSeasonalPalette(value:unknown):value is SeasonalPaletteId{return SEASONS.some(season=>season===value)}
+export function paletteById(id:string):Palette{return isSeasonalPalette(id)?SEASONAL_PALETTES[id]:PALETTES.find(p=>p.id===id)||PALETTES[0]}
 const storageKey=(userId:string)=>'home-together:palette:'+userId;
+const seasonalKey=(userId:string)=>storageKey(userId)+':seasonal';
 export const setupPaletteId='sage';
 
 export function prepareSetupPalette(userId:string){
@@ -25,11 +37,17 @@ export function prepareSetupPalette(userId:string){
  }catch{/* The palette picker still works for this visit. */}
 }
 
-function validPalette(value:string|null):string{return PALETTES.some(p=>p.id===value)?value!:'blush'}
-function readPalette(userId:string):string{try{return validPalette(localStorage.getItem(storageKey(userId)))}catch{return 'blush'}}
+function readPreference(userId:string){
+ try{
+  const saved=localStorage.getItem(storageKey(userId));
+  const standard=PALETTES.find(p=>p.id===saved)?.id||'blush';
+  const seasonal=localStorage.getItem(seasonalKey(userId));
+  return {userId,standard,seasonal:isSeasonalPalette(seasonal)?seasonal:null};
+ }catch{return {userId,standard:'blush',seasonal:null}}
+}
 
 function applyPalette(id:string){
- const palette=PALETTES.find(p=>p.id===id)||PALETTES[0];
+ const palette=paletteById(id);
  const root=document.documentElement;
  root.dataset.palette=palette.id;
  for(const shade of shades){const value=palette.colours?.[shade];if(value)root.style.setProperty('--theme-'+shade,value);else root.style.removeProperty('--theme-'+shade)}
@@ -38,20 +56,26 @@ function applyPalette(id:string){
 
 // A personal, per-account appearance preference for this browser/device.
 // It never changes household membership or anyone's calendar colour.
-export function usePalette(userId:string){
- const [preference,setPreference]=useState(()=>({userId,id:readPalette(userId)}));
+export function usePalette(userId:string,seasons:readonly SeasonalPaletteId[]=[]){
+ const [preference,setPreference]=useState(()=>readPreference(userId));
  const [message,setMessage]=useState('');
- const paletteId=preference.userId===userId?preference.id:readPalette(userId);
+ const current=preference.userId===userId?preference:readPreference(userId);
+ const paletteId=current.seasonal&&seasons.includes(current.seasonal)?current.seasonal:current.standard;
  useLayoutEffect(()=>{applyPalette(paletteId);return()=>applyPalette('blush')},[paletteId,userId]);
  useEffect(()=>{
   setMessage('');
-  const sync=(event:StorageEvent)=>{if(event.key===storageKey(userId)||event.key===null){setPreference({userId,id:readPalette(userId)});setMessage('')}};
+  const sync=(event:StorageEvent)=>{if(event.key===storageKey(userId)||event.key===seasonalKey(userId)||event.key===null){setPreference(readPreference(userId));setMessage('')}};
   window.addEventListener('storage',sync);return()=>window.removeEventListener('storage',sync);
  },[userId]);
  function choose(id:string){
-  if(!PALETTES.some(p=>p.id===id))return;
-  setPreference({userId,id});
-  try{localStorage.setItem(storageKey(userId),id);setMessage('Palette saved for you on this device.')}catch{setMessage('Palette applied for this visit. Your browser could not save the preference.')}
+  const seasonal=isSeasonalPalette(id);
+  if(seasonal?!seasons.includes(id):!PALETTES.some(p=>p.id===id))return;
+  setPreference({userId,standard:seasonal?current.standard:id,seasonal:seasonal?id:null});
+  try{
+   if(seasonal)localStorage.setItem(seasonalKey(userId),id);
+   else{localStorage.setItem(storageKey(userId),id);localStorage.removeItem(seasonalKey(userId))}
+   setMessage('Palette saved for you on this device.');
+  }catch{setMessage('Palette applied for this visit. Your browser could not save the preference.')}
  }
  return {paletteId,choose,message};
 }
