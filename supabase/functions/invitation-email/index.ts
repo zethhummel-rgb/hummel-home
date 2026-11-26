@@ -18,18 +18,28 @@ Deno.serve(async(req:Request)=>{
  const json=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
- let actorId='',claimId='';
+ let deliveryActor:{actorId:string;siteAdmin?:true}|null=null,claimId='';
  try{
   const bearer=req.headers.get('authorization')?.match(/^Bearer (.+)$/i)?.[1];if(!bearer)return json({error:'Sign in again to send an invitation.'},401);
-  const user=await admin.auth.getUser(bearer);if(user.error||!user.data.user)return json({error:'Sign in again to send an invitation.'},401);actorId=user.data.user.id;
+  const user=await admin.auth.getUser(bearer);if(user.error||!user.data.user)return json({error:'Sign in again to send an invitation.'},401);
+  const actorId=user.data.user.id;
   const raw=await req.text();if(raw.length>2048)return json({error:'Choose a valid invitation'},400);
   let body;try{body=JSON.parse(raw)}catch{return json({error:'Choose a valid invitation'},400)}
   const configured=!isTestProject&&validMailAddress(FROM)&&PASSWORD.length===16;
   if(body?.action==='status')return json({configured});
   if(body?.action!=='send'||!['family','pilot'].includes(body.kind)||typeof body.token!=='string'||!/^[a-f0-9]{64}$/.test(body.token))return json({error:'Choose a valid invitation'},400);
+  deliveryActor={actorId};
+  if(body.siteAdmin===true){
+   if(body.kind!=='pilot')return json({error:'Choose a valid invitation'},400);
+   const {data,error}=await admin.auth.getClaims(bearer);
+   if(error||!data||data.claims.sub!==actorId||data.claims.aal!=='aal2'){
+    return json({error:'Complete two-step verification to send a pilot invitation.'},403);
+   }
+   deliveryActor.siteAdmin=true;
+  }
   if(isTestProject)return json({error:'Email sending is disabled in the test app. Invitation creation and links can still be tested.',setupRequired:true},409);
   if(!configured)return json({error:'Automatic email delivery isn’t available yet. Your invitation link is ready to copy and share.',setupRequired:true},503);
-  const record=await service('claim',{actorId,kind:body.kind,token:body.token});
+  const record=await service('claim',{...deliveryActor,kind:body.kind,token:body.token});
   if(record.status==='sent')return json({sent:true,alreadySent:true});
   if(record.status==='sending')return json({error:'This invitation is already being sent. Please wait before trying again.'},409);
   if(record.status==='cooldown')return json({error:'Wait one minute before retrying this invitation, or copy the link.'},429);
@@ -37,10 +47,10 @@ Deno.serve(async(req:Request)=>{
   claimId=record.claimId;
   const message=invitationMessage({kind:body.kind as InviteKind,token:body.token,email:record.email,deliveryId:record.deliveryId,senderName:record.senderName,householdName:record.householdName,expiresAt:record.expiresAt},invitationApp);
   await sendGmail({from:FROM,to:record.email,password:PASSWORD,deliveryId:record.deliveryId,...message});
-  try{await service('finish',{actorId,claimId,status:'sent'})}catch{/* Gmail accepted the email. Do not invite an automatic resend. */}
+  try{await service('finish',{...deliveryActor,claimId,status:'sent'})}catch{/* Gmail accepted the email. Do not invite an automatic resend. */}
   return json({sent:true});
  }catch(error){
-  if(claimId)try{await service('finish',{actorId,claimId,status:'failed'})}catch{}
+  if(claimId&&deliveryActor)try{await service('finish',{...deliveryActor,claimId,status:'failed'})}catch{}
   const message=error instanceof Error&&safeErrors.has(error.message)?error.message:'Email delivery could not be confirmed. Your invitation link is ready to copy; wait a minute before retrying.';
   return json({error:message},400);
  }

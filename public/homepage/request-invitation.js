@@ -31,7 +31,9 @@ form.addEventListener('submit', async event => {
     });
     const result = await response.json();
     if (response.ok && result.preview) {
-      status.textContent = 'TEST preview complete. Use the email link below to contact HH directly.';
+      form.reset();
+      previousRequest = undefined;
+      status.textContent = 'Your request was saved in HH TEST. No email was sent.';
       return;
     }
     if (!response.ok || !result.sent) {

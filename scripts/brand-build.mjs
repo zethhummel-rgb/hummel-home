@@ -13,7 +13,7 @@ if(process.env.VITE_APP_ENV==='test'){
  fs.rmSync('dist/homepage',{force:true,recursive:true});
 }
 
-const assets=fs.readdirSync('dist/assets').filter(file=>/\.(js|css)$/.test(file)).sort().map(file=>'assets/'+file);
+const assets=fs.readdirSync('dist/assets').filter(file=>/\.(js|css)$/.test(file)&&!file.startsWith('admin-')).sort().map(file=>'assets/'+file);
 const files=['index.html','icon.svg','favicon.svg','manifest.webmanifest','icons/hh-180.png','icons/hh-192.png','icons/hh-512.png',...assets];
 const {createHash}=await import('node:crypto');
 const hash=createHash('sha256');
