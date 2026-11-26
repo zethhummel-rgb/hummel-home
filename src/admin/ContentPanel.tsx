@@ -1,10 +1,10 @@
 import {useEffect, useRef, useState, type ChangeEvent, type FormEvent} from 'react';
 import {ChevronDown} from 'lucide-react';
 import {testEnvironment} from '../config';
-import NoticeCard from '../NoticeCard';
+import NoticeCard, {noticeHistoryTitle} from '../NoticeCard';
 import {noticeImageBucket, noticeImageExtension, noticeImageMaxBytes} from '../noticeImages';
 import {SEASONAL_PALETTES, type SeasonalPaletteId} from '../palettes';
-import {appReleaseVersion, parseReleaseVersion, versionedNoticeTitle} from '../releaseVersion';
+import {appReleaseVersion, parseReleaseVersion} from '../releaseVersion';
 import type {GetAdminClient} from './api';
 import './season-schedules.css';
 
@@ -167,7 +167,7 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
     const cleanBody = body.trim();
     const cleanAlt = artwork ? alt.trim() : '';
     const cleanRelease = kind === 'update' ? parseReleaseVersion(releaseVersion) : undefined;
-    if (!cleanTitle) {setError('Enter a title.');titleInput.current?.focus();return;}
+    if (!cleanTitle && !artwork) {setError('Enter a title.');titleInput.current?.focus();return;}
     if (kind === 'update' && !cleanRelease) {
       setError(`Enter an app version such as ${appReleaseVersion}.`);releaseInput.current?.focus();return;
     }
@@ -248,7 +248,7 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
             </label>
             <p className="detail" id="release-version-hint">This version appears with the update’s title.</p>
           </div>}
-          <label>Title<input ref={titleInput} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} required /></label>
+          <label><span>Title {artwork && <small className="detail">(optional)</small>}</span><input ref={titleInput} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} required={!artwork} /></label>
           <label><span>{kind === 'update' ? 'What changed?' : 'Message'} {artwork && <small className="detail">(optional)</small>}</span><textarea ref={bodyInput} value={body} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={6} required={!artwork} /></label>
           <div className="notice-artwork">
             <p><strong>Image</strong> <small className="detail">(optional)</small></p>
@@ -286,13 +286,14 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
         {!data.notices.length && <p className="empty">Published notices will appear here.</p>}
         <ul className="record-list notices-history">
           {data.notices.map((row) => {
-            const displayTitle = versionedNoticeTitle(row.title, row.release_version);
+            const typedTitle = row.title?.trim() ?? '';
+            const displayTitle = noticeHistoryTitle(typedTitle, row.image_alt, row.release_version);
             return <li key={row.id}>
               <div className="record-main">
                 <strong>{displayTitle}</strong>
                 <span className="detail">{row.kind === 'update' ? 'App update' : 'Announcement'} · {dates.format(new Date(row.published_at))}</span>
                 {row.body && <p className="request-note">{row.body}</p>}
-                {row.image_path && row.image_alt && <p className="detail notice-history-alt">Image · {row.image_alt}</p>}
+                {typedTitle && row.image_path && row.image_alt && <p className="detail notice-history-alt">Image · {row.image_alt}</p>}
               </div>
               <div className="record-actions">
                 {row.archived_at ? <span className="status expired">Archived</span> : <>

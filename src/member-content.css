@@ -56,7 +56,7 @@
 .member-notice-preview.has-image { min-height: 0; max-height: 560px; padding: clamp(14px, 3.6vw, 20px); }
 .member-notice-dialog.has-image[open], .member-notice-preview.has-image { gap: 11px; }
 .member-notice-header.with-artwork h2 { font-size: 1.18rem; }
-.member-notice-copy.with-artwork h3 { margin-top: 9px; }
+.member-notice-copy.with-artwork h3, .member-notice-copy.with-artwork > :first-child + time { margin-top: 9px; }
 .member-notice-copy.with-artwork time { margin-bottom: 5px; }
 .member-notice-artwork {
   display: block;

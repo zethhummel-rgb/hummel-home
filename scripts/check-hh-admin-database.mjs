@@ -63,6 +63,7 @@ try{
  const insertLegacyPost=()=>db.query('insert into private.hh_app_notices(id,kind,title,body) values($1,$2,$3,$4)',Object.values(legacyPost));
  await insertLegacyPost();
  await db.exec(read('supabase/migrations/20261126235500_hh_notice_history_version.sql'));
+ await db.exec(read('supabase/migrations/20261126235900_hh_artwork_only_notices.sql'));
  assert.equal(await value('select release_version from private.hh_app_notices where id=$1',[legacyPost.id]),null);
  await db.query('delete from private.hh_app_notices where id=$1',[legacyPost.id]);
  for(const [role,id] of Object.entries(roles))await db.query('insert into auth.users values($1,$2,now())',[id,email(role)]);
@@ -190,6 +191,8 @@ try{
  await assert.rejects(content('publish_notice',{...memo,id:'broken'}),/Choose a valid notice/);
  await assert.rejects(content('publish_notice',{...memo,kind:'email'}),/Choose notice or update/);
  await assert.rejects(content('publish_notice',{...memo,title:'a'.repeat(101)}),/Enter a title/);
+ await assert.rejects(content('publish_notice',{...memo,title:''}),/Enter a title/);
+ await assert.rejects(content('publish_notice',{...memo,title:undefined}),/Enter a title/);
  await assert.rejects(content('publish_notice',{...memo,body:'\n\t  \r\n'}),/Enter a message/);
  await assert.rejects(content('publish_notice',{...memo,body:'a'.repeat(2001)}),/Enter a message/);
  await assert.rejects(content('set_palette',{palette:'blush',enabled:true}),/Choose a seasonal palette/);
@@ -447,12 +450,65 @@ try{
  await assert.rejects(adminRatings('snapshot'),/permission denied/);
  console.log('HH ratings passed: opt-in prompt availability, immutable per-account completion, optional comment and quote permission, anonymous-to-admin records, and stable pagination.');
 
+ await db.exec('reset role;');
+ await db.exec(read('supabase/migrations/20261127000100_hh_rating_prompt_snooze.sql'));
+ const snoozeHours=async(userId)=>Number(await value('select extract(epoch from (snoozed_until-now()))/3600 from private.hh_member_ratings where user_id=$1',[userId]));
+ const expireSnooze=(userId)=>db.query("update private.hh_member_ratings set snoozed_until=now()-interval '1 second' where user_id=$1",[userId]);
+ const legacySnoozeHours=await snoozeHours(roles.invitee);
+ assert.ok(legacySnoozeHours>23.99&&legacySnoozeHours<=24,'Legacy dismissal gets one bounded snooze');
+ assert.equal(await value('select snoozed_until from private.hh_member_ratings where user_id=$1',[roles.owner]),null);
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await db.exec('reset role;');
+ await expireSnooze(roles.invitee);
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,true,'The first snooze expiration makes the popup eligible again');
+ const firstSnooze=await memberRating('dismiss');
+ assert.equal(firstSnooze.completed,true);
+ assert.ok(Number.isFinite(Date.parse(firstSnooze.snoozed_until)));
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('invitee');
+ assert.deepEqual(await memberRating('dismiss'),firstSnooze,'A retry or another device does not extend a current snooze');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await db.exec('reset role;');
+ const newSnoozeHours=await snoozeHours(roles.invitee);
+ assert.ok(newSnoozeHours>23.99&&newSnoozeHours<=24);
+ await expireSnooze(roles.invitee);
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,true,'Later dismissals are also temporary');
+ await memberRating('dismiss');
+ await as('secondAdmin');
+ assert.deepEqual((await adminRatings('snapshot')).ratings,firstRatingPage.ratings);
+ await adminRatings('set_enabled',{enabled:false});
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await assert.rejects(memberRating('submit',{stars:5}),/prompt is currently off/);
+ await as('otherHost');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('secondAdmin');
+ await adminRatings('set_enabled',{enabled:true});
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,false,'Reenabling the global prompt leaves a current snooze in place');
+ assert.deepEqual(await memberRating('submit',{stars:5,comment:'Nice calendar.'}),{completed:true},'A member may submit even if another open device recorded a snooze');
+ assert.deepEqual(await memberRating('dismiss'),{completed:true});
+ assert.deepEqual(await memberRating('submit',{stars:2}),{completed:true});
+ assert.equal((await memberContent()).rating_eligible,false);
+ await db.exec('reset role;');
+ assert.deepEqual((await db.query('select stars,comment,allow_quote,snoozed_until from private.hh_member_ratings where user_id=$1',[roles.invitee])).rows,[
+  {stars:5,comment:'Nice calendar.',allow_quote:false,snoozed_until:null},
+ ]);
+ await as('secondAdmin');
+ const latestRating=(await adminRatings('snapshot')).ratings.find(row=>row.comment==='Nice calendar.');
+ assert.ok(latestRating);
+ assert.deepEqual(Object.keys(latestRating).sort(),['allow_quote','comment','created_at','id','stars']);
+ console.log('HH rating snooze passed: 24-hour per-account pause, unchanged retries, historical fallback, reeligibility, submit while snoozed, permanent ratings, and private reporting.');
+
  await db.exec('reset role;update private.hh_admin_auth_policy set require_mfa=true;');
  const bucket=(await db.query("select public,file_size_limit,allowed_mime_types from storage.buckets where id='hh-notice-images'")).rows[0];
  assert.deepEqual(bucket,{public:false,file_size_limit:5242880,allowed_mime_types:['image/jpeg','image/png','image/webp']});
  await db.exec("insert into storage.buckets(id,name) values('other','other');insert into storage.objects(bucket_id,name) values('other','unchanged');");
  const imageNotice=uid(40),imagePath=`${imageNotice}/artwork.webp`,sparePath=`${uid(41)}/artwork.jpg`;
- const imagePost={id:imageNotice,kind:'notice',title:'A picture for HH',body:'',image_path:imagePath,image_alt:' A festive front door '};
+ const imagePost={id:imageNotice,kind:'notice',title:'',body:'',image_path:imagePath,image_alt:' A festive front door '};
  const storageOperation=async(operation,sql,args)=>{
   await db.query("select set_config('fixture.storage.operation',$1,false)",[operation]);
   return (await db.query(sql,args)).rows;
@@ -470,8 +526,11 @@ try{
  await assert.rejects(content('publish_notice',{...imagePost,image_alt:' '}),/1 to 300 characters/);
  await assert.rejects(content('publish_notice',{...imagePost,image_alt:'a'.repeat(301)}),/1 to 300 characters/);
  await assert.rejects(content('publish_notice',{...imagePost,image_alt:'Two\nlines'}),/1 to 300 characters/);
- await assert.rejects(content('publish_notice',{...imagePost,image_path:null}),/description requires/);
- await assert.rejects(content('publish_notice',{...imagePost,image_path:null,image_alt:null}),/Enter a message/);
+ await assert.rejects(content('publish_notice',{...imagePost,title:'Image description',image_path:null}),/description requires/);
+ await assert.rejects(content('publish_notice',{...imagePost,title:'Plain notice',image_path:null,image_alt:null}),/Enter a message/);
+ await assert.rejects(content('publish_notice',{...imagePost,title:'line\nbreak'}),/Enter a title/);
+ await assert.rejects(content('publish_notice',{...imagePost,title:'a'.repeat(101)}),/Enter a title/);
+ await assert.rejects(content('publish_notice',{...imagePost,title:true}),/Enter a title/);
  await assert.rejects(insertImage(`${imageNotice}/artwork.svg`),/row-level security/);
  await assert.rejects(insertImage(`${imageNotice.toUpperCase()}/Artwork.webp`),/row-level security/);
  await assert.rejects(insertImage(`${imageNotice}/nested/artwork.webp`),/row-level security/);
@@ -487,10 +546,14 @@ try{
  await assert.rejects(insertImage(sparePath),/row-level security/);
  await as('secondAdmin','aal2');
  const art=(await content('publish_notice',imagePost)).notices.find(row=>row.id===imageNotice);
+ assert.equal(art.title,'');
  assert.equal(art.body,'');
  assert.equal(art.image_path,imagePath);
  assert.equal(art.image_alt,'A festive front door');
  assert.deepEqual((await content('publish_notice',imagePost)).notices.find(row=>row.id===imageNotice),art);
+ assert.deepEqual((await content('publish_notice',{...imagePost,title:undefined,body:undefined})).notices.find(row=>row.id===imageNotice),art);
+ assert.deepEqual((await content('publish_notice',{...imagePost,title:null,body:null})).notices.find(row=>row.id===imageNotice),art);
+ await assert.rejects(content('publish_notice',{...imagePost,title:'Different title'}),/already published with different content/);
  await assert.rejects(content('publish_notice',{...imagePost,image_alt:'Different description'}),/already published with different content/);
  assert.deepEqual(await editImage(imagePath),[]);
  assert.deepEqual(await removeImage(imagePath),[]);
@@ -537,7 +600,7 @@ try{
   from generate_series(1,26) number;`);
  await as('secondAdmin');
  const versionedPath=`${uid(45)}/artwork.jpg`;
- const versionedUpdate={id:uid(45),kind:'update',title:'A calendar refresh',body:'',image_path:versionedPath,image_alt:'Calendar on a sunny shelf'};
+ const versionedUpdate={id:uid(45),kind:'update',title:'',body:'',image_path:versionedPath,image_alt:'Calendar on a sunny shelf'};
  for(const invalid of [undefined,null,'v02.1','V2.10','V2.x','V1000000.1',2.1]){
   await assert.rejects(content('publish_notice',{...versionedUpdate,release_version:invalid}),/release version like V2.1/);
  }

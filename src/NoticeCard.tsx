@@ -7,6 +7,10 @@ const dates=new Intl.DateTimeFormat('en-CA',{dateStyle:'medium'});
 
 export type NoticeImage={url?:string;alt:string;state?:'loading'|'error'};
 
+export function noticeHistoryTitle(title:string,imageAlt?:string|null,releaseVersion?:string|null){
+ return versionedNoticeTitle(title||imageAlt?.trim()||'Image announcement',releaseVersion);
+}
+
 export function NoticeArtwork({image}:{image:NoticeImage}){
  const [failedUrl,setFailedUrl]=useState<string>();
  const imageUrl=image.url===failedUrl?undefined:image.url;
@@ -23,15 +27,16 @@ export default function NoticeCard({kind,title,body,publishedAt,releaseVersion,h
 }){
  const update=kind==='update';
  const Icon=update?Sparkles:Bell;
+ const label=update?'App update':'Notice';
  return <>
   <header className={'member-notice-header'+(image?' with-artwork':'')}>
    {!image&&<span className="member-notice-icon" aria-hidden="true"><Icon size={22} strokeWidth={1.6}/></span>}
-   <h2 id={headingId} ref={headingRef} tabIndex={headingRef?-1:undefined}>{update?'App update':'Notice'}</h2>
+   <h2 id={headingId} ref={headingRef} tabIndex={headingRef?-1:undefined}>{title?label:versionedNoticeTitle(label,releaseVersion)}</h2>
   </header>
   <section className={'member-notice-copy'+(image?' with-artwork':'')} tabIndex={headingRef?0:undefined}>
    {image&&<NoticeArtwork image={image}/>}
-   <h3>{versionedNoticeTitle(title,releaseVersion)}</h3>
-   <time dateTime={publishedAt}>{dates.format(new Date(publishedAt))}</time>
+   {title&&<h3>{versionedNoticeTitle(title,releaseVersion)}</h3>}
+   {(title||body)&&<time dateTime={publishedAt}>{dates.format(new Date(publishedAt))}</time>}
    {body&&<p>{body}</p>}
   </section>
   <footer className="member-notice-footer">{action}</footer>

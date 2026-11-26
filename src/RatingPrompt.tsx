@@ -13,12 +13,11 @@ export default function RatingPrompt({onSubmit,onSkip,onOpen}:{
  const id=useId();
  const [stars,setStars]=useState(0);
  const [comment,setComment]=useState('');
- const [allowQuote,setAllowQuote]=useState(false);
+ const [allowQuote,setAllowQuote]=useState(true);
  const [busy,setBusy]=useState<'rating'|'skip'|null>(null);
  const [error,setError]=useState('');
  const [complete,setComplete]=useState(false);
  const submitting=useRef(false);
- const quoteAvailable=!!comment.trim();
 
  async function finish(action:'rating'|'skip'){
   if(submitting.current||(action==='rating'&&!stars))return;
@@ -26,11 +25,12 @@ export default function RatingPrompt({onSubmit,onSkip,onOpen}:{
   setBusy(action);
   setError('');
   try{
-   if(action==='rating')await onSubmit({stars,comment:comment.trim(),allow_quote:quoteAvailable&&allowQuote});
+   const cleanComment=comment.trim();
+   if(action==='rating')await onSubmit({stars,comment:cleanComment,allow_quote:!!cleanComment&&allowQuote});
    else await onSkip();
    setComplete(true);
   }catch{
-   setError(action==='rating'?'Your rating couldn’t be saved. Try again.':'Your choice couldn’t be saved. Try again.');
+   setError(action==='rating'?'Your rating couldn’t be saved. Try again.':'The prompt couldn’t be dismissed. Try again.');
   }finally{
    submitting.current=false;
    setBusy(null);
@@ -57,20 +57,17 @@ export default function RatingPrompt({onSubmit,onSkip,onOpen}:{
     </div>
     <label className="member-rating-comment" htmlFor={`${id}-comment`}>Comment <small>(optional)</small></label>
     <textarea id={`${id}-comment`} value={comment} rows={3} maxLength={commentLimit}
-     onChange={event=>{
-      const next=event.target.value;
-      setComment(next);
-      if(!next.trim())setAllowQuote(false);
-     }} placeholder="What’s working well? What could be better?"/>
+     onChange={event=>setComment(event.target.value)} placeholder="What’s working well? What could be better?"/>
     <label className="member-rating-consent">
-     <input type="checkbox" disabled={!quoteAvailable} checked={allowQuote} onChange={event=>setAllowQuote(event.target.checked)}/>
+     <input type="checkbox" checked={allowQuote} onChange={event=>setAllowQuote(event.target.checked)}/>
      <span>HH may quote my comment on its website <small>(optional)</small></span>
     </label>
    </fieldset>
    {error&&<p className="member-rating-error" role="alert">{error}</p>}
    <footer className="member-rating-actions">
-    <button type="button" className="button" disabled={busy!==null} onClick={()=>void finish('skip')}>{busy==='skip'?'Please wait…':'No thanks'}</button>
+    <button type="button" className="button" aria-describedby={`${id}-dismiss-note`} disabled={busy!==null} onClick={()=>void finish('skip')}>{busy==='skip'?'Dismissing…':'Dismiss for now'}</button>
     <button type="submit" className="button primary" disabled={!stars||busy!==null}>{busy==='rating'?'Saving…':'Send rating'}</button>
+    <p className="member-rating-dismiss-note" id={`${id}-dismiss-note`}>Dismissing pauses the prompt for 24 hours.</p>
    </footer>
   </form>}
  </MemberPopup>;

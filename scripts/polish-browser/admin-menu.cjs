@@ -9,9 +9,10 @@ const {setFixtureHandler,serveFixture,redirectFixtureAPI}=require('./fixture-api
 
 const user={id:'22222222-2222-4222-8222-222222222228',email:'admin-menu@example.invalid',aud:'authenticated',role:'authenticated',email_confirmed_at:'2026-01-01',user_metadata:{},app_metadata:{provider:'email'}};
 const home='11111111-1111-4111-8111-111111111118';
-const exp=Math.floor(Date.now()/1000)+86400;
+const authLifetime=7*86400;
+const exp=Math.floor(Date.now()/1000)+authLifetime;
 const b64=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
-const session={access_token:[b64({alg:'HS256',typ:'JWT'}),b64({exp,sub:user.id,aud:'authenticated',session_id:home}),'fixture'].join('.'),refresh_token:'fixture',expires_in:86400,expires_at:exp,token_type:'bearer',user};
+const session={access_token:[b64({alg:'HS256',typ:'JWT'}),b64({exp,sub:user.id,aud:'authenticated',session_id:home}),'fixture'].join('.'),refresh_token:'fixture',expires_in:authLifetime,expires_at:exp,token_type:'bearer',user};
 const member={user_id:user.id,display_name:'Fixture Admin',role:'owner',household_id:home};
 const basePaletteKey='home-together:palette:'+user.id;
 const notices=[
@@ -25,15 +26,16 @@ const feedbackFixtures=[
 ];
 const noticeImageBucket='hh-notice-images';
 const imageNotices=[
- {id:'33333333-3333-4333-8333-333333333331',kind:'notice',title:'Photo-only fixture notice',body:'',
+ {id:'33333333-3333-4333-8333-333333333331',kind:'notice',title:'',body:'',
   published_at:'2026-11-28T17:00:00Z',image_path:'33333333-3333-4333-8333-333333333331/artwork.png',image_alt:'Green and gold pixels in a checkerboard.'},
- {id:'33333333-3333-4333-8333-333333333332',kind:'update',title:'Unavailable fixture image',body:'',
+ {id:'33333333-3333-4333-8333-333333333332',kind:'update',title:'',body:'',release_version:'V2.2',
   published_at:'2026-11-28T16:00:00Z',image_path:'33333333-3333-4333-8333-333333333332/artwork.png',image_alt:'Archived green and gold checkerboard.'},
 ];
 const noticePng=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMwDXX5cjKV4cvJVNNQFwAqLgXhW7KSRAAAAABJRU5ErkJggg==','base64');
 const noticeHistory=[
- {id:'33333333-3333-4333-8333-333333333341',kind:'update',title:'Fictional family calendar update',body:'The family calendar has a new test view.',
-  release_version:'V2.1',published_at:'2026-11-27T17:00:00Z'},
+ {id:'33333333-3333-4333-8333-333333333341',kind:'update',title:'',body:'',release_version:'V2.2',
+  published_at:'2026-11-27T17:00:00Z',image_path:'33333333-3333-4333-8333-333333333341/artwork.png',
+  image_alt:'A gold and green release graphic.'},
  {id:'33333333-3333-4333-8333-333333333342',kind:'notice',title:'Fictional service announcement',body:'The test service is available again.',
   published_at:'2026-11-26T17:00:00Z'},
 ];
@@ -120,10 +122,11 @@ async function checkMemberContent(page,setSeasons,setNotices){
 async function checkMemberNoticeImages(page,storageRequests){
  await page.setViewportSize({width:320,height:650});
  const notice=page.getByRole('dialog',{name:'Notice',exact:true});
- const update=page.getByRole('dialog',{name:'App update',exact:true});
+ const update=page.getByRole('dialog',{name:'V2.2 · App update',exact:true});
  const image=notice.getByRole('img',{name:imageNotices[0].image_alt,exact:true});
  await image.waitFor();
  assert.equal(await image.evaluate(async node=>{await node.decode();return node.naturalWidth}),2);
+ await checkArtworkOnlyPopup(notice);
  const gotIt=notice.getByRole('button',{name:'Got it',exact:true});
  const imageBounds=await image.boundingBox();
  const actionBounds=await gotIt.boundingBox();
@@ -135,6 +138,7 @@ async function checkMemberNoticeImages(page,storageRequests){
  await update.getByText(imageNotices[1].image_alt,{exact:true}).waitFor();
  await update.getByText('Loading image…',{exact:true}).waitFor({state:'detached'});
  assert.equal(await update.getByRole('img').count(),0,'A storage failure has visible alternative text');
+ await checkArtworkOnlyPopup(update);
  await update.getByRole('button',{name:'Got it',exact:true}).click();
  await update.waitFor({state:'detached'});
  assert.deepEqual(storageRequests,
@@ -146,24 +150,49 @@ async function checkMemberNoticeImages(page,storageRequests){
  assert.equal(await notice.count()+await update.count(),0,'Dismissed image notices do not reopen');
 }
 
+async function checkArtworkOnlyPopup(container){
+ assert.equal(await container.getByRole('heading',{level:3}).count(),0,'Artwork-only popups omit the empty title');
+ assert.equal(await container.locator('time').count(),0,'Artwork-only popups omit the date');
+}
+
 async function checkAdminNoticeImage(page,noticeWrites,storageRequests){
  await page.getByRole('button',{name:'Notices & updates',exact:true}).click();
  const compose=page.getByRole('region',{name:'Write a notice'});
  await compose.getByRole('combobox',{name:'Notice type'}).selectOption('update');
- const title='Fictional image-only update';
- const releaseVersion='V2.2';
+ const releaseVersion='V2.3';
  const imageAlt='Two green and gold squares.';
+ const previewButton=compose.getByRole('button',{name:'Preview notice',exact:true});
+ const preview=compose.locator('.member-notice-preview');
+ const titleInput=compose.getByRole('textbox',{name:/^Title/});
+ const bodyInput=compose.getByRole('textbox',{name:/^What changed/});
  const versionInput=compose.getByRole('textbox',{name:'App version',exact:true});
- assert.equal(await versionInput.inputValue(),'V2.1');
- await versionInput.fill(' v2.2 ');
- await compose.getByRole('textbox',{name:/Title/i}).fill(title);
+ assert.equal(await versionInput.inputValue(),'V2.2');
+ assert.equal(await titleInput.evaluate(node=>node.required),true,'Text-only updates still require a title');
+ assert.equal(await bodyInput.evaluate(node=>node.required),true,'Text-only updates still require a message');
+ await previewButton.click();
+ assert.equal(await preview.count(),0);
+ await titleInput.fill('Text-only fixture');
+ await bodyInput.fill('A fictional update without artwork.');
+ await versionInput.fill('invalid');
+ await previewButton.click();
+ await page.getByRole('alert').filter({hasText:'Enter an app version such as V2.2.'}).waitFor();
+ assert.equal(await preview.count(),0);
+ await versionInput.fill(' v2.3 ');
+ await previewButton.click();
+ await preview.getByRole('heading',{name:'V2.3 · Text-only fixture',exact:true}).waitFor();
+ await preview.getByText('A fictional update without artwork.',{exact:true}).waitFor();
+ await compose.getByRole('button',{name:'Keep editing',exact:true}).click();
+ await titleInput.fill('');
+ await bodyInput.fill('');
  await compose.locator('input[type="file"]').setInputFiles({name:'fixture-notice.png',mimeType:'image/png',buffer:noticePng});
  await compose.getByRole('textbox',{name:/image description|alt text/i}).fill(imageAlt);
- await compose.getByRole('button',{name:'Preview notice',exact:true}).click();
- const preview=compose.locator('.member-notice-preview');
+ assert.equal(await titleInput.evaluate(node=>node.required),false);
+ assert.equal(await bodyInput.evaluate(node=>node.required),false);
+ await previewButton.click();
  const image=preview.getByRole('img',{name:imageAlt,exact:true});
  assert.equal(await image.evaluate(async node=>{await node.decode();return node.naturalWidth}),2);
- await preview.getByRole('heading',{name:`${releaseVersion} · ${title}`,exact:true}).waitFor();
+ await preview.getByRole('heading',{name:`${releaseVersion} · App update`,exact:true}).waitFor();
+ await checkArtworkOnlyPopup(preview);
  await preview.getByText('Got it',{exact:true}).waitFor();
  assert.equal(storageRequests.length,0,'Preview does not upload an image');
  assert.equal(noticeWrites.length,0,'Preview does not publish a notice');
@@ -177,9 +206,10 @@ async function checkAdminNoticeImage(page,noticeWrites,storageRequests){
  const imagePath=payload.id+'/artwork.png';
  assert.deepEqual(noticeWrites[0],{
   action:'publish_notice',
-  payload:{id:payload.id,kind:'update',title,body:'',image_path:imagePath,image_alt:imageAlt,release_version:releaseVersion},
+  payload:{id:payload.id,kind:'update',title:'',body:'',image_path:imagePath,image_alt:imageAlt,release_version:releaseVersion},
  });
  assert.deepEqual(storageRequests[0],{method:'POST',path:`/storage/v1/object/${noticeImageBucket}/${imagePath}`});
+ await page.getByRole('button',{name:`Archive ${releaseVersion} · ${imageAlt}`,exact:true}).waitFor();
 }
 
 async function checkPaletteGroups(page){
@@ -282,9 +312,11 @@ async function checkAdminPaletteSchedule(page,paletteWrites){
 }
 
 async function checkMemberNoticeHistory(page,historyRequests){
- const popup=page.getByRole('dialog',{name:'App update',exact:true});
- const title=`${noticeHistory[0].release_version} · ${noticeHistory[0].title}`;
- await popup.getByRole('heading',{name:title,exact:true}).waitFor();
+ const {release_version:version,image_alt:alt}=noticeHistory[0];
+ const popup=page.getByRole('dialog',{name:`${version} · App update`,exact:true});
+ const title=`${version} · ${alt}`;
+ await popup.getByRole('img',{name:alt,exact:true}).waitFor();
+ await checkArtworkOnlyPopup(popup);
  await popup.getByRole('button',{name:'Got it',exact:true}).click();
  await popup.waitFor({state:'detached'});
  assert.equal(historyRequests.length,0,'The history is loaded when requested');
@@ -292,13 +324,14 @@ async function checkMemberNoticeHistory(page,historyRequests){
  await nav.getByRole('button',{name:'More',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:/^Notices & updates/}).click();
  const history=page.getByRole('dialog',{name:'Notices & updates',exact:true});
- await history.getByText('App version on this device V2.1',{exact:true}).waitFor();
+ await history.getByText('App version on this device V2.2',{exact:true}).waitFor();
  const dismissed=history.getByText(title,{exact:true});
  await dismissed.click();
- await history.getByText(noticeHistory[0].body,{exact:true}).waitFor();
+ await history.getByRole('img',{name:alt,exact:true}).waitFor();
  const loadEarlier=history.getByRole('button',{name:'Load earlier posts',exact:true});
  await loadEarlier.click();
- await history.getByText(noticeHistory[1].title,{exact:true}).waitFor();
+ await history.getByText(noticeHistory[1].title,{exact:true}).click();
+ await history.getByText(noticeHistory[1].body,{exact:true}).waitFor();
  await loadEarlier.waitFor({state:'detached'});
  assert.deepEqual(historyRequests,[
   {before_published_at:null,before_id:null},
@@ -308,7 +341,19 @@ async function checkMemberNoticeHistory(page,historyRequests){
   'Loading earlier pages preserves already-dismissed updates in history');
 }
 
-async function checkRatingPrompt(page,state,requests,queueNotice){
+async function checkRatingClosedAfterReload(page,rating,message){
+ await page.reload();
+ await page.getByRole('button',{name:'Open Settings',exact:true}).click();
+ await page.getByRole('button',{name:/^Appearance /}).click();
+ // The fixture's seasonal palette arrives in the same response as rating eligibility.
+ await page.getByRole('button',{name:/Spring Garden/}).waitFor();
+ await page.getByRole('button',{name:'Done',exact:true}).click();
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.getByRole('heading',{name:'Today & coming up',exact:true}).waitFor();
+ assert.equal(await rating.count(),0,message);
+}
+
+async function checkRatingPrompt(page,state,requests,queueNotice,moveRatingTime){
  const rating=page.getByRole('dialog',{name:/HH working for you/});
  const notice=page.getByRole('dialog',{name:'Notice',exact:true});
  if(state==='rating-submit'){
@@ -320,12 +365,15 @@ async function checkRatingPrompt(page,state,requests,queueNotice){
  await page.setViewportSize({width:320,height:650});
  assert.ok(await rating.evaluate(node=>{const bounds=node.getBoundingClientRect();return bounds.left>=0&&bounds.right<=innerWidth&&node.scrollWidth<=node.clientWidth+1}));
  const send=rating.getByRole('button',{name:'Send rating',exact:true});
- const skip=rating.getByRole('button',{name:'No thanks',exact:true});
+ const skip=rating.getByRole('button',{name:'Dismiss for now',exact:true});
  const comment=rating.getByRole('textbox',{name:/^Comment/});
  const quote=rating.getByRole('checkbox',{name:/quote my comment/});
+ const quoteLabel=rating.getByText(/^HH may quote my comment on its website/);
  assert.equal(await send.isEnabled(),false);
- assert.equal(await quote.isChecked(),false);
- assert.equal(await quote.isEnabled(),false);
+ assert.equal(await quote.isChecked(),true);
+ assert.equal(await quote.isEnabled(),true);
+ await quoteLabel.click();
+ assert.equal(await quote.isChecked(),false,'Tapping the optional label clears permission before typing');
  if(state==='rating-submit'){
   const first=rating.getByRole('radio',{name:'1 star',exact:true});
   const second=rating.getByRole('radio',{name:'2 stars',exact:true});
@@ -336,7 +384,7 @@ async function checkRatingPrompt(page,state,requests,queueNotice){
   assert.equal(await send.isEnabled(),true,'A comment is optional');
   await comment.fill('  The shared calendar is clear.  ');
   assert.equal(await quote.isEnabled(),true);
-  assert.equal(await quote.isChecked(),false,'Quoting requires an explicit choice');
+  assert.equal(await quote.isChecked(),false,'Adding a comment preserves the member’s unchecked choice');
   const refreshed=queueNotice();
   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   assert.equal(await Promise.race([refreshed,delay(10000,false,{ref:false})]),true);
@@ -350,27 +398,49 @@ async function checkRatingPrompt(page,state,requests,queueNotice){
   assert.equal(await second.isChecked(),true);
   assert.equal(await comment.inputValue(),'  The shared calendar is clear.  ');
   assert.equal(await quote.isChecked(),false);
-  await quote.check();
+  await quoteLabel.click();
+  assert.equal(await quote.isChecked(),true,'Tapping the optional label restores permission');
   await send.click();
   await notice.getByText(ratingNotice.title,{exact:true}).waitFor();
   assert.deepEqual(requests[1],{action:'submit',payload:{stars:2,comment:'The shared calendar is clear.',allow_quote:true}});
   await notice.getByRole('button',{name:'Got it',exact:true}).click();
+ }else if(state==='rating-no-comment'||state==='rating-unquoted'){
+  const five=rating.getByRole('radio',{name:'5 stars',exact:true});
+  await five.focus();
+  await page.keyboard.press('Space');
+  const message=state==='rating-unquoted'?'A fictional comment for the admin only.':'';
+  if(message){
+   await comment.fill(message);
+   assert.equal(await quote.isChecked(),false);
+  }else{
+   await quoteLabel.click();
+   assert.equal(await quote.isChecked(),true);
+   assert.equal(await comment.inputValue(),'');
+  }
+  await send.click();
+  await rating.waitFor({state:'detached'});
+  assert.deepEqual(requests,[{action:'submit',payload:{stars:5,comment:message,allow_quote:false}}]);
  }else{
   await skip.click();
   await rating.waitFor({state:'detached'});
   assert.equal(requests.length,1);
   assert.equal(requests[0].action,'dismiss');
   assert.deepEqual(requests[0].payload??{},{});
+  await moveRatingTime(-1000);
+  await checkRatingClosedAfterReload(page,rating,'Dismissing does not prompt again within 24 hours');
+  assert.equal(requests.length,1,'Reopening during the snooze does not save another dismissal');
+  await moveRatingTime(1000);
+  await page.reload();
+  await rating.waitFor();
+  const four=rating.getByRole('radio',{name:'4 stars',exact:true});
+  await four.focus();
+  await page.keyboard.press('Space');
+  await send.click();
+  await rating.waitFor({state:'detached'});
+  assert.deepEqual(requests[1],{action:'submit',payload:{stars:4,comment:'',allow_quote:false}});
  }
  const completedRequests=requests.length;
- await page.reload();
- await page.getByRole('button',{name:'Open Settings',exact:true}).click();
- await page.getByRole('button',{name:/^Appearance /}).click();
- await page.getByRole('button',{name:/Spring Garden/}).waitFor();
- await page.getByRole('button',{name:'Done',exact:true}).click();
- await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
- await page.getByRole('heading',{name:'Today & coming up',exact:true}).waitFor();
- assert.equal(await rating.count(),0,'The same member is only prompted once');
+ await checkRatingClosedAfterReload(page,rating,'Members are not prompted after submitting a rating');
  assert.equal(requests.length,completedRequests);
 }
 
@@ -390,12 +460,12 @@ async function run(){
   browser=await launchBrowser();
   const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
   const adminUrl=new URL('admin.html',url).href;
-  const allScenarios=['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','member-palettes','member-images','member-notice-history','admin-notice-image','admin-palette-schedule','rating-submit','rating-dismiss'];
+  const allScenarios=['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','member-palettes','member-images','member-notice-history','admin-notice-image','admin-palette-schedule','rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'];
   const scenarios=process.env.HH_ADMIN_MENU_SCENARIOS?.split(',').map(scenario=>scenario.trim())??allScenarios;
   assert.ok(scenarios.every(scenario=>allScenarios.includes(scenario)),'Unknown admin menu browser scenario');
   for(const state of scenarios){
    const approved=['authorized','authorized-visit','callback','signout','admin-notice-image','admin-palette-schedule'].includes(state);
-   const ratingMember=state==='rating-submit'||state==='rating-dismiss';
+   const ratingMember=['rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'].includes(state);
    const context=await browser.newContext({viewport:{width:390,height:844}});
    const localOrigin=new URL(url).origin;
    await context.route('**/*',route=>new URL(route.request().url()).origin===localOrigin?route.continue():route.abort('blockedbyclient'));
@@ -414,10 +484,12 @@ async function run(){
    const {promise:adminCheck,resolve:checked}=Promise.withResolvers();
    const {promise:waitToReply,resolve:reply}=Promise.withResolvers();
    let activeSeasons=state==='member-palettes'?seasonalPaletteIds:['spring','spring','unknown'];
-   const initialNotices={'rating-submit':notices.slice(0,1),'rating-dismiss':[],'member-palettes':[],'member-images':imageNotices,
+   const initialNotices={'rating-submit':notices.slice(0,1),'rating-dismiss':[],'rating-no-comment':[],'rating-unquoted':[],'member-palettes':[],'member-images':imageNotices,
     'member-notice-history':noticeHistory.slice(0,1)};
    let publishedNotices=initialNotices[state]??notices;
    let ratingComplete=false;
+   let ratingTime=Date.now();
+   let snoozedUntil=0;
    const ratingRequests=[];
    const ratingToggles=[];
    const feedbackFilters=[];
@@ -438,6 +510,9 @@ async function run(){
      if(method==='GET'&&state==='member-images'){
       if(target.pathname.endsWith(imageNotices[0].image_path))return route.fulfill({body:noticePng,headers:{'Content-Type':'image/png'}});
       if(target.pathname.endsWith(imageNotices[1].image_path))return route.fulfill({status:404,json:{message:'Fixture image unavailable'}});
+     }
+     if(method==='GET'&&state==='member-notice-history'&&target.pathname.endsWith(noticeHistory[0].image_path)){
+      return route.fulfill({body:noticePng,headers:{'Content-Type':'image/png'}});
      }
      if(method==='POST'&&state==='admin-notice-image'){
       assert.match(req.headers()['content-type'],/image\/png|multipart\/form-data/);
@@ -460,7 +535,7 @@ async function run(){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      const includesRatingNotice=publishedNotices.includes(ratingNotice);
      if(state==='member-content'||state==='member-palettes'||state==='member-images'||state==='member-notice-history'||ratingMember){
-      data={notices:publishedNotices,seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete};
+      data={notices:publishedNotices,seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete&&ratingTime>=snoozedUntil};
      }
      await route.fulfill({json:data});
      if(includesRatingNotice)ratingNoticeRefreshed(true);
@@ -477,8 +552,15 @@ async function run(){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      ratingRequests.push(req.postDataJSON());
      if(state==='rating-submit'&&ratingRequests.length===1)return route.fulfill({status:409,json:{message:'Fixture save failure'}});
-     ratingComplete=true;
-     data={completed:true};
+     const action=ratingRequests.at(-1).action;
+     if(action==='dismiss'){
+      snoozedUntil=ratingTime+86400000;
+      data={completed:true,snoozed_until:new Date(snoozedUntil).toISOString()};
+     }else{
+      assert.equal(action,'submit');
+      ratingComplete=true;
+      data={completed:true};
+     }
     }
     else if(name==='hh_admin_status'){
      roleChecks++;
@@ -562,7 +644,11 @@ async function run(){
      continue;
     }
     if(ratingMember){
-     await checkRatingPrompt(page,state,ratingRequests,()=>{publishedNotices=[ratingNotice,...publishedNotices];return queuedRatingNotice});
+     await checkRatingPrompt(page,state,ratingRequests,()=>{publishedNotices=[ratingNotice,...publishedNotices];return queuedRatingNotice},async offset=>{
+      assert.ok(snoozedUntil,'The fixture needs a saved snooze before moving time');
+      ratingTime=snoozedUntil+offset;
+      await page.clock.setFixedTime(ratingTime);
+     });
      continue;
     }
     await page.getByRole('button',{name:'Open Settings',exact:true}).click();
@@ -628,4 +714,4 @@ async function run(){
  }finally{if(browser)await browser.close();server.close()}
 }
 
-run().then(()=>console.log('Admin menu checks passed: '+(process.env.HH_ADMIN_MENU_SCENARIOS||'TEST sign-in reuse, direct-entry denial, late sign-out, notices with optional images, seasonal palettes and one-time ratings.'))).catch(error=>{console.error(error);process.exitCode=1});
+run().then(()=>console.log('Admin menu checks passed: '+(process.env.HH_ADMIN_MENU_SCENARIOS||'TEST sign-in reuse, direct-entry denial, late sign-out, notices with optional images, seasonal palettes and rating snooze.'))).catch(error=>{console.error(error);process.exitCode=1});

@@ -2,11 +2,11 @@ import {useEffect,useState} from 'react';
 import {ChevronDown} from 'lucide-react';
 import {authNamespace} from './config';
 import MemberPopup from './MemberPopup';
-import NoticeCard,{NoticeArtwork,type NoticeImage} from './NoticeCard';
+import NoticeCard,{NoticeArtwork,noticeHistoryTitle,type NoticeImage} from './NoticeCard';
 import {isNoticeImagePath,noticeImageBucket,noticeImageExtension,noticeImageMaxBytes} from './noticeImages';
 import {isSeasonalPalette,type SeasonalPaletteId} from './palettes';
 import {isCurrentAuthClient,supabase} from './supabase';
-import {appReleaseVersion,versionedNoticeTitle} from './releaseVersion';
+import {appReleaseVersion} from './releaseVersion';
 
 type MemberNotice={id:string;kind:'notice'|'update';title:string;body:string;published_at:string;image_path?:string|null;image_alt?:string|null;release_version?:string|null};
 type MemberContent={notices:MemberNotice[];seasons:SeasonalPaletteId[];expiries:Partial<Record<SeasonalPaletteId,number>>;ratingEligible:boolean};
@@ -31,12 +31,14 @@ function readDismissals(userId:string):string[]{
 
 export function useMemberContent(userId:string,enabled:boolean){
  const client=supabase;
- const [snapshot,setSnapshot]=useState<{client:typeof client;userId:string;content:MemberContent}|null>(null);
+ const [snapshot,setSnapshot]=useState<{client:typeof client;userId:string;requestedAt:number;content:MemberContent}|null>(null);
  const [dismissal,setDismissal]=useState(()=>({userId,ids:readDismissals(userId)}));
- const [completedRatingFor,setCompletedRatingFor]=useState<string>();
+ const [ratingHold,setRatingHold]=useState<{client:typeof client;userId:string;until:number}>();
  const [themeClock,setThemeClock]=useState(()=>Date.now());
  const dismissed=dismissal.userId===userId?dismissal.ids:readDismissals(userId);
  const content=enabled&&snapshot?.client===client&&snapshot.userId===userId?snapshot.content:emptyContent;
+ const ratingOnHold=ratingHold?.client===client&&ratingHold.userId===userId
+  &&(snapshot?.requestedAt??0)<ratingHold.until;
 
  useEffect(()=>{
   if(!enabled)return;
@@ -45,6 +47,7 @@ export function useMemberContent(userId:string,enabled:boolean){
   async function refresh(){
    setThemeClock(Date.now());
    if(loading||document.hidden||!navigator.onLine||!isCurrentAuthClient(client))return;
+   const requestedAt=Date.now();
    loading=true;
    try{
     const {data:auth,error:sessionError}=await client.auth.getSession();
@@ -58,7 +61,7 @@ export function useMemberContent(userId:string,enabled:boolean){
      const end=Date.parse(data?.palette_expiries?.[id]);
      if(Number.isFinite(end))expiries[id]=end;
     }
-    setSnapshot({client,userId,content:{notices,seasons,expiries,ratingEligible:data?.rating_eligible===true}});
+    setSnapshot({client,userId,requestedAt,content:{notices,seasons,expiries,ratingEligible:data?.rating_eligible===true}});
     window.clearTimeout(boundary);
     const wait=Date.parse(data?.next_palette_change_at)-Date.now();
     if(Number.isFinite(wait)&&wait>0)boundary=window.setTimeout(refresh,Math.min(wait+100,2_000_000_000));
@@ -101,13 +104,14 @@ export function useMemberContent(userId:string,enabled:boolean){
   if(authError||auth.session?.user.id!==userId||!isCurrentAuthClient(client))throw Error('Open HH and sign in again to continue.');
   const {data,error}=await client.rpc('hh_member_rating',{action:input?'submit':'dismiss',payload:input??{}});
   if(error||data?.completed!==true||!isCurrentAuthClient(client))throw Error('HH could not save your choice. Please try again.');
-  setCompletedRatingFor(userId);
+  const snoozedUntil=Date.parse(data?.snoozed_until);
+  setRatingHold({client,userId,until:!input&&Number.isFinite(snoozedUntil)?snoozedUntil:Infinity});
  }
 
  return {
   notices:content.notices.filter(notice=>!dismissed.includes(notice.id)),
   seasons:content.seasons.filter(id=>themeClock<(content.expiries[id]??Infinity)),
-  ratingEligible:content.ratingEligible&&completedRatingFor!==userId,
+  ratingEligible:content.ratingEligible&&!ratingOnHold,
   dismiss,completeRating,
  };
 }
@@ -227,7 +231,7 @@ function HistoryNotice({notice,userId}:{notice:MemberNotice;userId:string}){
   <summary>
    <span className="notice-history-heading">
     <span>{notice.kind==='update'?'App update':'Notice'} · <time dateTime={notice.published_at}>{historyDate.format(new Date(notice.published_at))}</time></span>
-    <strong>{versionedNoticeTitle(notice.title,notice.release_version)}</strong>
+    <strong>{noticeHistoryTitle(notice.title,notice.image_alt,notice.release_version)}</strong>
    </span>
    <ChevronDown size={18} aria-hidden="true"/>
   </summary>

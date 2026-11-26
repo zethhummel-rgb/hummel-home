@@ -56,7 +56,7 @@ export default function Inbox({view, getClient}: {view: 'feedback' | 'ratings'; 
       <button type="button" disabled={busy} onClick={() => void read()}>Refresh</button>
     </div>
     {ratings && <div className="rating-admin-control">
-      <p className="detail">Ask members for a one-time rating. They can choose whether HH may quote their comment on the website.</p>
+      <p className="detail">HH can prompt members until they submit a rating. Dismissing pauses the prompt for 24 hours. Members can choose whether HH may quote their comment on the website.</p>
       {page && <button type="button" role="switch" aria-label="Show the rating pop-up" aria-checked={page.enabled === true} disabled={busy}
         onClick={() => void read({enabled: !page.enabled})}>{page.enabled ? 'Prompt on' : 'Prompt off'}</button>}
     </div>}

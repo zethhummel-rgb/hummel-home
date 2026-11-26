@@ -243,7 +243,7 @@ const adminViews = [
   {id: 'notices', label: 'Notices & updates', icon: Bell, description: 'Preview and publish pop-ups that members see when they open HH.'},
   {id: 'palettes', label: 'Seasonal palettes', icon: Palette, description: 'Choose which seasonal and holiday themes members can use and when.'},
   {id: 'feedback', label: 'Feedback & ideas', icon: MessageSquare, description: 'Read feedback and ideas submitted by members.'},
-  {id: 'ratings', label: 'App ratings', icon: Star, description: 'Manage the one-time rating prompt and review responses.'},
+  {id: 'ratings', label: 'App ratings', icon: Star, description: 'Manage the rating prompt and review responses.'},
 ] as const;
 type AdminView = typeof adminViews[number]['id'];
 
