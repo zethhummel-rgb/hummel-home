@@ -20,6 +20,10 @@ const status=()=>value('select public.hh_admin_status()');
 const dashboard=(action,payload={})=>value('select public.hh_admin_dashboard($1,$2)',[action,payload]);
 const content=(action,payload={})=>value('select public.hh_admin_content($1,$2)',[action,payload]);
 const memberContent=()=>value('select public.hh_member_content()');
+const memberRating=(action,payload={})=>value('select public.hh_member_rating($1,$2)',[action,payload]);
+const adminRatings=(action,payload={})=>value('select public.hh_admin_ratings($1,$2)',[action,payload]);
+const dateInToronto=(offset)=>value("select ((now() at time zone 'America/Toronto')::date+$1::int)::text",[offset]);
+const midnightInToronto=(date)=>value("select to_char(($1::date::timestamp at time zone 'America/Toronto') at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",[date]);
 const mail=(action,payload)=>value('select public.invitation_mail_service($1,$2)',[action,payload]);
 const request=(action,payload)=>value('select public.pilot_request_mail_service($1,$2)',[action,payload]);
 
@@ -36,6 +40,13 @@ try{
  for(const name of ['20261110151437_hh_one_email_invitations','20261112181000_hh_pilot_request_mail','20261126210000_hh_site_admin_dashboard','20261126213000_hh_admin_content','20261126220000_hh_admin_auth_policy']){
   await db.exec(read(`supabase/migrations/${name}.sql`));
  }
+ await db.exec("insert into private.hh_seasonal_palettes(palette,enabled) values('winter',true)");
+ await db.exec(read('supabase/migrations/20261126230000_hh_seasonal_palette_schedule.sql'));
+ assert.deepEqual((await db.query('select * from private.hh_seasonal_palettes')).rows,[
+  {palette:'winter',enabled:true,starts_on:null,stops_on:null},
+ ]);
+ await db.exec('delete from private.hh_seasonal_palettes');
+ await db.exec(read('supabase/migrations/20261126234000_hh_member_ratings.sql'));
  for(const [role,id] of Object.entries(roles))await db.query('insert into auth.users values($1,$2,now())',[id,email(role)]);
  for(const role of ['host','otherHost'])await db.query('insert into private.pilot_hosts values($1)',[email(role)]);
 
@@ -143,7 +154,9 @@ try{
 
  const memo={id:uid(20),kind:'notice',title:' Community notice ',body:'Next weekend\nBring your calendar. '};
  const release={id:uid(21),kind:'update',title:'What’s new',body:'New colors are available.'};
- const emptyContent={notices:[],seasonal_palettes:[]};
+ const emptyContent={notices:[],seasonal_palettes:[],palette_expiries:{},next_palette_change_at:null,rating_eligible:false};
+ const paletteIds=['spring','summer','autumn','winter','easter','halloween','christmas','thanksgiving'];
+ const emptyAdminContent={notices:[],seasonal_palettes:[],palette_schedule:paletteIds.map(palette=>({palette,enabled:false,starts_on:null,stops_on:null}))};
  assert.deepEqual(await memberContent(),emptyContent);
  await assert.rejects(content('publish_notice',memo),/Admin access required/);
  await assert.rejects(value('select * from private.hh_app_notices'),/permission denied/);
@@ -155,7 +168,7 @@ try{
  await assert.rejects(content('set_palette',{palette:'spring',enabled:true}),/Verify your second factor/);
  await as('admin','aal2');
  await assert.rejects(memberContent(),/Confirmed household membership required/);
- assert.deepEqual(await content('snapshot'),emptyContent);
+ assert.deepEqual(await content('snapshot'),emptyAdminContent);
  await assert.rejects(content('publish_notice',{...memo,id:'broken'}),/Choose a valid notice/);
  await assert.rejects(content('publish_notice',{...memo,kind:'email'}),/Choose notice or update/);
  await assert.rejects(content('publish_notice',{...memo,title:'a'.repeat(101)}),/Enter a title/);
@@ -280,6 +293,139 @@ try{
  assert.deepEqual(await status(),{is_admin:true,requires_mfa:true});
  await assert.rejects(dashboard('snapshot'),/Verify your second factor/);
  await assert.rejects(content('snapshot'),/Verify your second factor/);
+
+ // Active windows use Toronto midnight, independent of the database session zone.
+ await db.exec("reset role;set time zone 'Pacific/Auckland';");
+ const yesterday=await dateInToronto(-1),today=await dateInToronto(0),tomorrow=await dateInToronto(1),later=await dateInToronto(2);
+ const tomorrowAt=await midnightInToronto(tomorrow),laterAt=await midnightInToronto(later);
+ const year=Number(today.slice(0,4))+1;
+ await as('secondAdmin','aal2');
+ await assert.rejects(content('set_palette',{palette:'easter',enabled:true,starts_on:'2027-02-29'}),/valid schedule date/);
+ await assert.rejects(content('set_palette',{palette:'easter',enabled:true,starts_on:20270101}),/valid schedule date/);
+ await assert.rejects(content('set_palette',{palette:'easter',enabled:true,starts_on:'2027-1-01'}),/valid schedule date/);
+ await assert.rejects(content('set_palette',{palette:'easter',enabled:true,starts_on:today,stops_on:today}),/end date must be after/);
+ await content('set_palette',{palette:'easter',enabled:true,starts_on:today,stops_on:later});
+ await assert.rejects(content('set_palette',{palette:'easter',enabled:false,stops_on:yesterday}),/end date must be after/);
+ const scheduled=(await content('set_palette',{palette:'easter',enabled:true})).palette_schedule.find(row=>row.palette==='easter');
+ assert.deepEqual(scheduled,{palette:'easter',enabled:true,starts_on:today,stops_on:later});
+ await content('set_palette',{palette:'halloween',enabled:true,starts_on:tomorrow});
+ await content('set_palette',{palette:'christmas',enabled:true,stops_on:today});
+ const adminSchedule=await content('set_palette',{palette:'thanksgiving',enabled:false,starts_on:tomorrow,stops_on:later});
+ assert.deepEqual(adminSchedule.seasonal_palettes,['spring','summer','easter','halloween','christmas']);
+ assert.deepEqual(adminSchedule.palette_schedule.find(row=>row.palette==='thanksgiving'),{palette:'thanksgiving',enabled:false,starts_on:tomorrow,stops_on:later});
+ await as('owner');
+ const householdScheduled=await memberContent();
+ assert.deepEqual(householdScheduled.seasonal_palettes,['spring','summer','easter']);
+ assert.deepEqual(householdScheduled.palette_expiries,{easter:laterAt});
+ assert.equal(householdScheduled.next_palette_change_at,tomorrowAt);
+ assert.deepEqual(householdScheduled.notices.map(row=>row.id),[release.id]);
+ assert.equal('palette_schedule' in householdScheduled,false);
+
+ await as('secondAdmin','aal2');
+ const cleared=(await content('set_palette',{palette:'easter',enabled:true,stops_on:null})).palette_schedule.find(row=>row.palette==='easter');
+ assert.deepEqual(cleared,{palette:'easter',enabled:true,starts_on:today,stops_on:null});
+ await content('set_palette',{palette:'halloween',enabled:false});
+ await content('set_palette',{palette:'christmas',enabled:true,stops_on:`${year}-01-01`});
+ await content('set_palette',{palette:'summer',enabled:true,starts_on:null,stops_on:`${year}-07-01`});
+ await as('owner');
+ const easternSeason=await memberContent();
+ assert.deepEqual(easternSeason.palette_expiries,{christmas:`${year}-01-01T05:00:00Z`,summer:`${year}-07-01T04:00:00Z`});
+ assert.equal(easternSeason.next_palette_change_at,`${year}-01-01T05:00:00Z`);
+ await assert.rejects(content('set_palette',{palette:'thanksgiving',enabled:true}),/Admin access required/);
+ console.log('HH scheduled palettes passed: saved legacy flags, validated dates and ranges, preserved omitted dates, cleared explicit nulls, Toronto start/stop behaviour, UTC daylight offsets, and member/administrator scope.');
+
+ assert.equal((await memberContent()).rating_eligible,false);
+ await assert.rejects(memberRating('submit',{stars:5}),/prompt is currently off/);
+ await assert.rejects(memberRating('dismiss'),/prompt is currently off/);
+ await assert.rejects(adminRatings('snapshot'),/Admin access required/);
+ await assert.rejects(value('select * from private.hh_member_ratings'),/permission denied/);
+ await assert.rejects(db.exec('update private.hh_member_rating_prompt set enabled=true'),/permission denied/);
+ await as('secondAdmin');
+ await assert.rejects(adminRatings('set_enabled',{enabled:true}),/Verify your second factor/);
+ await as('secondAdmin','aal2');
+ assert.deepEqual(await adminRatings('snapshot'),{enabled:false,ratings:[],has_more:false});
+ await assert.rejects(adminRatings('set_enabled',{enabled:'true'}),/Choose whether the prompt is enabled/);
+ assert.deepEqual(await adminRatings('set_enabled',{enabled:true}),{enabled:true,ratings:[],has_more:false});
+ await assert.rejects(memberRating('submit',{stars:4}),/Confirmed household membership required/);
+ await as('unapprovedAlias');
+ await assert.rejects(memberRating('dismiss'),/Confirmed household membership required/);
+ await as('owner');
+ assert.equal((await memberContent()).rating_eligible,true);
+ await assert.rejects(memberRating('submit',{stars:'5'}),/one to five stars/);
+ await assert.rejects(memberRating('submit',{stars:4.5}),/one to five stars/);
+ await assert.rejects(memberRating('submit',{stars:6}),/one to five stars/);
+ await assert.rejects(memberRating('submit',{stars:5,comment:true}),/valid comment/);
+ await assert.rejects(memberRating('submit',{stars:5,comment:'a'.repeat(1001)}),/1,000 characters/);
+ await assert.rejects(memberRating('submit',{stars:5,comment:' \n ',allow_quote:true}),/before allowing HH to quote/);
+ await assert.rejects(memberRating('submit',{stars:5,comment:'Fixture',allow_quote:'true'}),/whether HH may quote/);
+ assert.equal((await memberContent()).rating_eligible,true);
+ assert.deepEqual(await memberRating('submit',{stars:5,comment:' Good for our calendar.\n',allow_quote:true}),{completed:true});
+ assert.deepEqual(await memberRating('submit',{stars:1,comment:'Different content',allow_quote:false}),{completed:true});
+ assert.deepEqual(await memberRating('dismiss'),{completed:true});
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,true);
+ assert.deepEqual(await memberRating('dismiss'),{completed:true});
+ assert.deepEqual(await memberRating('submit',{stars:5}),{completed:true});
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('host');
+ assert.deepEqual(await memberRating('submit',{stars:4}),{completed:true});
+ await as('secondAdmin','aal2');
+ const savedRatings=await adminRatings('snapshot');
+ assert.equal(savedRatings.ratings.length,2);
+ assert.deepEqual(Object.keys(savedRatings.ratings[0]).sort(),['allow_quote','comment','created_at','id','stars']);
+ const quoted=savedRatings.ratings.find(row=>row.stars===5);
+ assert.equal(quoted.comment,'Good for our calendar.');
+ assert.equal(quoted.allow_quote,true);
+ assert.notEqual(quoted.id,roles.owner);
+ const unquoted=savedRatings.ratings.find(row=>row.stars===4);
+ assert.equal(unquoted.comment,null);
+ assert.equal(unquoted.allow_quote,false);
+ assert.equal((await adminRatings('set_enabled',{enabled:false})).enabled,false);
+ await as('owner');
+ assert.deepEqual(await memberRating('submit',{stars:2}),{completed:true});
+ await as('otherHost');
+ await value("select public.create_household('Another Fixture Home','Other owner')");
+ assert.equal((await memberContent()).rating_eligible,false);
+ await assert.rejects(memberRating('dismiss'),/prompt is currently off/);
+ await as('secondAdmin','aal2');
+ assert.equal((await adminRatings('set_enabled',{enabled:true})).enabled,true);
+ await as('owner');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('invitee');
+ assert.equal((await memberContent()).rating_eligible,false);
+ await as('otherHost');
+ assert.equal((await memberContent()).rating_eligible,true);
+
+ await db.exec('reset role;');
+ assert.deepEqual((await db.query('select id,stars,comment,allow_quote,created_at from private.hh_member_ratings where user_id=$1',[roles.invitee])).rows,[
+  {id:null,stars:null,comment:null,allow_quote:false,created_at:null},
+ ]);
+ await db.exec(`insert into auth.users(id,email,email_confirmed_at)
+  select ('33333333-3333-4333-8333-'||lpad(number::text,12,'0'))::uuid,concat('fixture-',number,'@hh-qa.invalid'),now()
+  from generate_series(1,27) number;
+  insert into private.hh_member_ratings(user_id,id,stars,created_at)
+  select u.id,('44444444-4444-4444-8444-'||right(u.id::text,12))::uuid,3,'2000-01-01T00:00:00Z'
+  from auth.users u where u.id::text like '33333333-%';`);
+ await as('secondAdmin','aal2');
+ const firstRatingPage=await adminRatings('snapshot');
+ assert.equal(firstRatingPage.ratings.length,25);
+ assert.equal(firstRatingPage.has_more,true);
+ const lastRating=firstRatingPage.ratings.at(-1);
+ const nextRatingPage=await adminRatings('snapshot',{before_created_at:lastRating.created_at,before_id:lastRating.id});
+ assert.equal(nextRatingPage.ratings.length,4);
+ assert.equal(nextRatingPage.has_more,false);
+ assert.equal(new Set([...firstRatingPage.ratings,...nextRatingPage.ratings].map(row=>row.id)).size,29);
+ await assert.rejects(adminRatings('snapshot',{before_id:lastRating.id}),/Invalid ratings cursor/);
+ await assert.rejects(adminRatings('snapshot',{before_created_at:'infinity',before_id:lastRating.id}),/Invalid ratings cursor/);
+ await assert.rejects(adminRatings('snapshot',{before_created_at:lastRating.created_at,before_id:'wrong'}),/Invalid ratings cursor/);
+ await db.exec('reset role;insert into private.hh_admin_auth_policy(id,require_mfa) values(true,false);');
+ await as('secondAdmin');
+ assert.equal((await adminRatings('snapshot')).enabled,true);
+ await db.exec('reset role;set role anon;');
+ await assert.rejects(memberRating('dismiss'),/permission denied/);
+ await assert.rejects(adminRatings('snapshot'),/permission denied/);
+ console.log('HH ratings passed: opt-in prompt availability, immutable per-account completion, optional comment and quote permission, anonymous-to-admin records, and stable pagination.');
  console.log('HH admin policy checks passed: MFA required by default and on missing settings, explicit TEST opt-out, private setting, and exact identity authorization.');
  console.log('HH admin database checks passed: exact identity grants, existing host access and separate MFA, shared pilot seats and mail claims, old and new invitation redemption, atomic request capture, preview, deduplication and expiry.');
  console.log('HH content checks passed: confirmed household-reader scope, explicit admin publication, idempotent retries, archives, seasonal availability, and restricted database grants.');

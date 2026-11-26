@@ -14,13 +14,17 @@ export const PALETTES:Palette[]=[
  {id:'ivory',name:'Classic Ivory',description:'Warm whites and charcoal',swatches:['#EEECE5','#56544D','#B38B50'],colours:colours(['#FAF9F5','#FFFFFC','#FCFBF8','#FFFEFA','#F1EFE8','#E8E5DA','#F6F4EE','#E4E1D7','#C9C4B5','#383832','#44443D','#6C6B62','#77766C','#56544D','#414038','#9C9787','#B9B4A5','#383832'])},
 ];
 
-const SEASONS=['spring','summer','autumn','winter'] as const;
+const SEASONS=['spring','summer','autumn','winter','easter','halloween','christmas','thanksgiving'] as const;
 export type SeasonalPaletteId=typeof SEASONS[number];
 export const SEASONAL_PALETTES:Record<SeasonalPaletteId,Palette>={
  spring:{id:'spring',name:'Spring Garden',description:'Fresh greens and soft cream',swatches:['#E8F0DF','#43664B','#CBAC65'],colours:colours(['#F6F9F2','#FEFFFC','#F9FBF5','#FCFEFA','#E8F0DF','#DCE9D1','#EFF5E8','#D8E4D1','#B6C7AE','#293E2F','#314C37','#4F6552','#566B55','#43664B','#35543C','#597D5C','#A0B494','#283B2B'])},
- summer:{id:'summer',name:'Summer Shore',description:'Sea glass and warm sand',swatches:['#E2EFE8','#35645E','#C59B57'],colours:colours(['#FAF8F0','#FFFEFA','#FBFAF3','#FFFDF7','#E2EFE8','#D5E9E0','#EEF5EC','#D1E1D8','#B3C9BE','#263E3A','#284B44','#526662','#586D68','#35645E','#2A514B','#5B8279','#A0B9AD','#293F39'])},
+ summer:{id:'summer',name:'Summer Shore',description:'Sea glass and warm sand',swatches:['#E2EFE8','#35645E','#C59B57'],colours:colours(['#FAF8F0','#FFFEFA','#FBFAF3','#FFFDF7','#E2EFE8','#D5E9E0','#EEF5EC','#D1E1D8','#B3C9BE','#263E3A','#284B44','#526662','#4F625E','#35645E','#2A514B','#5B8279','#A0B9AD','#293F39'])},
  autumn:{id:'autumn',name:'Autumn Harvest',description:'Toasted copper and oatmeal',swatches:['#F1E4D5','#875642','#BE914C'],colours:colours(['#FAF6EF','#FFFCF8','#FBF7F0','#FFFDF8','#F1E4D5','#EBD8C7','#F6EDE2','#E7D8CA','#D5BBA8','#46352D','#563C31','#70594D','#756052','#875642','#704434','#A3745E','#C2A08B','#433129'])},
  winter:{id:'winter',name:'Winter Pine',description:'Evergreen and frosted blue',swatches:['#E4EEEF','#355A54','#AABFC3'],colours:colours(['#F4F8F8','#FCFFFF','#F6FBFB','#FCFEFE','#E4EEEF','#D9E8E8','#EEF5F5','#D8E4E5','#B4C8CB','#293E43','#2A4849','#50666A','#596E72','#355A54','#284741','#608783','#A1B9BC','#273D42'])},
+ easter:{id:'easter',name:'Easter',description:'Lavender, primrose and spring green',swatches:['#EFE7F7','#684E80','#E4BA68'],colours:colours(['#FAF7FC','#FFFDFF','#FCF9FE','#FEFCFF','#F0E7F7','#E9DAF2','#F7F0FA','#E7DDEC','#CBBADB','#403248','#4F3B62','#64546C','#66566F','#684E80','#523968','#8F70A6','#B2C69F','#3D314A'])},
+ halloween:{id:'halloween',name:'Halloween',description:'Pumpkin orange and dusky plum',swatches:['#F6E9EF','#714367','#D58A4D'],colours:colours(['#FCF6F4','#FFFCFB','#FDF8F6','#FFFCFA','#F5E7EF','#EFDBE7','#FAF0F5','#ECDCE6','#C9AFC4','#35293B','#482D48','#635166','#6B566D','#714367','#593453','#976384','#CA916E','#3B283B'])},
+ christmas:{id:'christmas',name:'Christmas',description:'Evergreen, warm white and cranberry',swatches:['#E8EFE6','#355544','#AD5157'],colours:colours(['#F7F8F2','#FFFFFC','#F9FBF6','#FCFDF9','#E7EEE4','#D9E7D7','#EFF4ED','#DBE4D9','#BACDBA','#2B3C34','#304C3E','#4D6558','#50635A','#355544','#274437','#65826F','#B66E6C','#2A3C34'])},
+ thanksgiving:{id:'thanksgiving',name:'Thanksgiving',description:'Maple, cranberry and toasted oat',swatches:['#F3E7D4','#804B37','#CC9A59'],colours:colours(['#FBF7EF','#FFFCF7','#FDF9F1','#FFFCF8','#F3E7D4','#EDDBC3','#F8EEE0','#EADCBE','#D0B998','#46332B','#593B2E','#675144','#6E594A','#804B37','#633829','#9F6F4F','#C09B66','#483229'])},
 };
 
 export function isSeasonalPalette(value:unknown):value is SeasonalPaletteId{return SEASONS.some(season=>season===value)}

@@ -1,0 +1,35 @@
+.seasonal-decor {
+  display: block;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  inline-size: clamp(136px, 21vw, 243px);
+  line-height: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.seasonal-decor__scene {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.page-heading:has(> .seasonal-decor) {
+  gap: clamp(10px, 2vw, 26px);
+}
+
+.page-heading:has(> .seasonal-decor) > :first-child {
+  min-inline-size: 0;
+}
+
+@media (max-width: 600px) {
+  .seasonal-decor {
+    inline-size: clamp(91px, 30vw, 149px);
+  }
+}
+
+@media (forced-colors: active) {
+  .seasonal-decor {
+    display: none;
+  }
+}

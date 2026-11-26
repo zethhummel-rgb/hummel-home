@@ -1,9 +1,13 @@
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {testEnvironment} from '../config';
+import NoticeCard from '../NoticeCard';
+import {SEASONAL_PALETTES, type SeasonalPaletteId} from '../palettes';
 import type {GetAdminClient} from './api';
 
-const seasons = ['spring', 'summer', 'autumn', 'winter'] as const;
-type Season = typeof seasons[number];
+const holidays = ['easter', 'summer', 'thanksgiving', 'halloween', 'christmas'] as const;
+const otherSeasons = ['spring', 'autumn', 'winter'] as const;
+type Season = SeasonalPaletteId;
+type Schedule = {palette: Season; enabled: boolean; starts_on: string | null; stops_on: string | null};
 type NoticeKind = 'notice' | 'update';
 type Notice = {
   id: string;
@@ -13,7 +17,7 @@ type Notice = {
   published_at: string;
   archived_at: string | null;
 };
-type Contents = {notices: Notice[]; seasonal_palettes: Season[]};
+type Contents = {notices: Notice[]; seasonal_palettes: Season[]; palette_schedule?: Schedule[]};
 type Draft = {id: string; kind: NoticeKind; title: string; body: string};
 type Action = 'snapshot' | 'publish_notice' | 'archive_notice' | 'set_palette';
 const dates = new Intl.DateTimeFormat('en-CA', {dateStyle: 'medium', timeStyle: 'short'});
@@ -108,7 +112,7 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
     {data && view === 'notices' && <div className="workspace content-workspace">
       <section className="panel" aria-labelledby="compose-heading">
         <h2 id="compose-heading">Write a notice</h2>
-        <p className="detail content-intro">Published notices appear on the signed-in HH Home screen.</p>
+        <p className="detail content-intro">Published notices open as pop-ups for members in HH.</p>
         {!preview ? <form onSubmit={review}>
           <label><span>Type</span><select aria-label="Notice type" value={kind} onChange={(event) => setKind(event.target.value as NoticeKind)}>
             <option value="notice">Announcement</option><option value="update">App update</option>
@@ -117,8 +121,10 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
           <label>{kind === 'update' ? 'What changed?' : 'Message'}<textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={2000} rows={6} required /></label>
           <button className="primary" disabled={busy}>Preview notice</button>
         </form> : <div className="notice-preview">
-          <span className="status">{preview.kind === 'update' ? 'App update' : 'Announcement'}</span>
-          <h3>{preview.title}</h3><p>{preview.body}</p>
+          <div className="member-notice-preview" aria-label="Member preview">
+            <NoticeCard kind={preview.kind} title={preview.title} body={preview.body} publishedAt={new Date().toISOString()}
+              action={<span className="preview-acknowledge">Got it</span>} />
+          </div>
           <p className="detail">Publish this notice to all {testEnvironment ? 'HH TEST' : 'HH'} households?</p>
           <div className="inline-actions">
             <button type="button" className="primary" disabled={busy} onClick={() => void publish()}>Publish notice</button>
@@ -152,17 +158,59 @@ export default function ContentPanel({view, getClient}: {view: 'notices' | 'pale
     </div>}
     {data && view === 'palettes' && <section className="panel palette-panel" aria-labelledby="season-heading">
       <div className="record-nav"><h2 id="season-heading">Seasonal palettes</h2><button type="button" disabled={busy} onClick={() => void refresh()}>Refresh</button></div>
-      <p className="detail content-intro">Enabled palettes become optional choices in Settings → Appearance. Each person picks their own colours.</p>
-      <ul className="record-list palette-list">
-        {seasons.map((season) => {
-          const name = season.charAt(0).toUpperCase() + season.slice(1);
-          const enabled = data.seasonal_palettes.includes(season);
-          return <li key={season}>
-            <strong><span aria-hidden="true" className={`season-swatch ${season}`} />{name}</strong>
-            <button type="button" role="switch" aria-checked={enabled} aria-label={`${name} palette`} disabled={busy} onClick={() => void save('set_palette', {palette: season, enabled: !enabled}, `${name} palette ${enabled ? 'disabled' : 'enabled'}.`)}>{enabled ? 'Enabled' : 'Disabled'}</button>
-          </li>;
-        })}
-      </ul>
+      <p className="detail content-intro">Members can choose available themes in Settings → Appearance. HH restores their regular colours when the theme ends. Dates start at midnight Eastern time.</p>
+      <ThemeSchedules seasons={holidays} data={data} busy={busy} onSave={saveSchedule} />
+      <details className="other-seasons"><summary>Other seasonal palettes</summary>
+        <ThemeSchedules seasons={otherSeasons} data={data} busy={busy} onSave={saveSchedule} />
+      </details>
     </section>}
   </>;
+
+  function saveSchedule(schedule: Schedule) {
+    if (schedule.starts_on && schedule.stops_on && schedule.stops_on <= schedule.starts_on) {
+      setFeedback('');
+      setError('Choose a stop date after the start date.');
+      return;
+    }
+    void save('set_palette', schedule, `${SEASONAL_PALETTES[schedule.palette].name} schedule saved.`);
+  }
+}
+
+const easternDate = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit'});
+
+function ThemeSchedules({seasons, data, busy, onSave}: {
+  seasons: readonly Season[]; data: Contents; busy: boolean; onSave: (schedule: Schedule) => void;
+}) {
+  const date = easternDate.formatToParts(new Date());
+  const today = ['year', 'month', 'day'].map((part) => date.find((item) => item.type === part)?.value).join('-');
+  return <div className="palette-list">
+    {seasons.map((id) => {
+      const palette = SEASONAL_PALETTES[id];
+      const row = data.palette_schedule?.find((item) => item.palette === id)
+        ?? {palette: id, enabled: data.seasonal_palettes.includes(id), starts_on: null, stops_on: null};
+      const status = !row.enabled ? 'Off' : row.starts_on && today < row.starts_on ? 'Scheduled' : row.stops_on && today >= row.stops_on ? 'Ended' : 'Available';
+      return <details className="palette-schedule" key={id}>
+        <summary>
+          <span className="schedule-summary">
+            <span className="schedule-swatches" aria-hidden="true">{palette.swatches.map((colour) => <i key={colour} style={{backgroundColor: colour}} />)}</span>
+            <span><strong>{palette.name}</strong><small className="detail">{palette.description}</small></span>
+          </span>
+          <span className="status">{status}</span>
+        </summary>
+        <form key={`${id}:${row.enabled}:${row.starts_on}:${row.stops_on}`} aria-label={`${palette.name} schedule`} onSubmit={(event) => {
+          event.preventDefault();
+          const input = new FormData(event.currentTarget);
+          onSave({palette: id, enabled: input.has('enabled'), starts_on: String(input.get('starts_on') ?? '') || null, stops_on: String(input.get('stops_on') ?? '') || null});
+        }}>
+          <label className="schedule-check"><input type="checkbox" name="enabled" defaultChecked={row.enabled} /> Enable theme</label>
+          <div className="schedule-dates">
+            <label>Start date<input type="date" name="starts_on" defaultValue={row.starts_on ?? ''} /></label>
+            <label>Stop date<input type="date" name="stops_on" defaultValue={row.stops_on ?? ''} /></label>
+          </div>
+          <p className="detail">Leave start blank to make it available now. The theme ends at the start of the stop date.</p>
+          <button className="primary" disabled={busy}>Save schedule</button>
+        </form>
+      </details>;
+    })}
+  </div>;
 }

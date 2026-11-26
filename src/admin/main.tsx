@@ -7,6 +7,7 @@ import {
   type AdminClient, type DashboardSnapshot, type GetAdminClient, type PilotInvitation,
 } from './api';
 import ContentPanel from './ContentPanel';
+import Inbox from './Inbox';
 import './styles.css';
 
 const logo = new URL('./icons/hh-192.png', familyAppUrl).href;
@@ -220,12 +221,15 @@ function VerifyAdmin({client, onVerified, signOut}: {client: AdminClient; onVeri
 const formatDate = new Intl.DateTimeFormat('en-CA', {dateStyle: 'medium', timeStyle: 'short'});
 const showDate = (value: string) => formatDate.format(new Date(value));
 type InviteStatus = 'Pending' | 'Accepted' | 'Expired';
+type RequestStatus = InviteStatus | 'New';
+const requestFilters = ['All', 'Needs invitation', 'Pending', 'Accepted'] as const;
+const needsInvitation = (status: RequestStatus) => status === 'New' || status === 'Expired';
 function invitationStatus(invite: PilotInvitation): InviteStatus {
   if (invite.used_at) return 'Accepted';
   return Date.parse(invite.expires_at) > Date.now() ? 'Pending' : 'Expired';
 }
 
-function Status({value}: {value: InviteStatus | 'New'}) {
+function Status({value}: {value: RequestStatus}) {
   return <span className={`status ${value.toLowerCase()}`}>{value}</span>;
 }
 
@@ -235,6 +239,8 @@ const adminViews = [
   {id: 'pilot', label: 'Pilot access'},
   {id: 'notices', label: 'Notices & updates'},
   {id: 'palettes', label: 'Seasonal palettes'},
+  {id: 'feedback', label: 'Feedback & ideas'},
+  {id: 'ratings', label: 'App ratings'},
 ] as const;
 type AdminView = typeof adminViews[number]['id'];
 
@@ -250,12 +256,13 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
     <nav className="admin-navigation" aria-label="Admin Dashboard">
       {adminViews.map((tab) => <button type="button" key={tab.id} aria-current={tab.id === view ? 'page' : undefined} onClick={() => {
         setView(tab.id);
-        if (tab.id !== 'pilot') setContentView(tab.id);
+        if (tab.id === 'notices' || tab.id === 'palettes') setContentView(tab.id);
       }}>{tab.label}</button>)}
     </nav>
     {error && <p className="message error" role="alert">{error}</p>}
     <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
-    {contentView && <div hidden={view === 'pilot'}><ContentPanel view={contentView} getClient={getClient} /></div>}
+    {contentView && <div hidden={view !== 'notices' && view !== 'palettes'}><ContentPanel view={contentView} getClient={getClient} /></div>}
+    {(view === 'feedback' || view === 'ratings') && <Inbox key={view} view={view} getClient={getClient} />}
   </main>;
 }
 
@@ -263,6 +270,7 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>();
   const [email, setEmail] = useState('');
   const [selection, setSelection] = useState<'requests' | 'invitations'>('requests');
+  const [requestFilter, setRequestFilter] = useState<typeof requestFilters[number]>('All');
   const [filter, setFilter] = useState<InviteStatus | 'All'>('All');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -322,7 +330,6 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
   }
 
   const needle = search.trim().toLowerCase();
-  const requests = snapshot?.requests.filter((request) => `${request.name} ${request.email}`.toLowerCase().includes(needle)) ?? [];
   const invitations = snapshot?.invitations.filter((invite) => invite.email.toLowerCase().includes(needle)
     && (filter === 'All' || invitationStatus(invite) === filter)) ?? [];
   const invitationsByEmail = new Map<string, InviteStatus>();
@@ -331,6 +338,11 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
     const current = invitationsByEmail.get(invite.email.toLowerCase());
     if (!current || current === 'Expired' || status === 'Accepted') invitationsByEmail.set(invite.email.toLowerCase(), status);
   }
+  const requests = (snapshot?.requests ?? [])
+    .filter((request) => `${request.name} ${request.email}`.toLowerCase().includes(needle))
+    .map((request) => ({request, status: invitationsByEmail.get(request.email.toLowerCase()) ?? 'New' as const}))
+    .filter(({status}) => requestFilter === 'All'
+      || (requestFilter === 'Needs invitation' ? needsInvitation(status) : status === requestFilter));
 
   return <div className="workspace">
       <aside className="panel composer" aria-labelledby="invite-heading">
@@ -370,6 +382,9 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
         </div>
         <div className="filters">
           <label>Search<input type="search" placeholder={selection === 'requests' ? 'Name or email' : 'Email address'} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+          {selection === 'requests' && <div className="status-filter"><label htmlFor="request-status">Request status</label><select id="request-status" value={requestFilter} onChange={(event) => setRequestFilter(event.target.value as typeof requestFilter)}>
+            {requestFilters.map((option) => <option key={option}>{option}</option>)}
+          </select></div>}
           {selection === 'invitations' && <div className="status-filter"><label htmlFor="invite-status">Status</label><select id="invite-status" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
             <option>All</option><option>Pending</option><option>Accepted</option><option>Expired</option>
           </select></div>}
@@ -377,11 +392,9 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
         {loadError && <p className="message error" role="alert">{loadError}</p>}
         {loading && <p className="empty" role="status">Loading pilot activity…</p>}
         {snapshot && selection === 'requests' && <>
-          {!requests.length && !loading && <p className="empty">{needle ? 'No requests match your search.' : 'New invitation requests from the HH website will appear here.'}</p>}
+          {!requests.length && !loading && <p className="empty">{requestFilter !== 'All' || needle ? 'No requests match these filters.' : 'New invitation requests from the HH website will appear here.'}</p>}
           <ul className="record-list">
-            {requests.map((request) => {
-              const status = invitationsByEmail.get(request.email.toLowerCase()) ?? 'New';
-              return <li key={request.id}>
+            {requests.map(({request, status}) => <li key={request.id}>
                 <div className="record-main">
                   <strong>{request.name}</strong>
                   <span>{request.email}</span>
@@ -391,13 +404,12 @@ function Dashboard({getClient}: {getClient: GetAdminClient}) {
                   {request.message && <p className="request-note">{request.message}</p>}
                 </div>
                 <div className="record-actions"><Status value={status} />
-                  {(status === 'New' || status === 'Expired') && <button type="button" aria-label={`Invite ${request.name}`} onClick={() => {
+                  {needsInvitation(status) && <button type="button" aria-label={`Invite ${request.name}`} onClick={() => {
                     setEmail(request.email);
                     document.getElementById('recipient')?.focus();
                   }}>Invite</button>}
                 </div>
-              </li>;
-            })}
+              </li>)}
           </ul>
         </>}
         {snapshot && selection === 'invitations' && <>

@@ -58,22 +58,38 @@ form { display: grid; gap: .9rem; }
 .dashboard-heading > button { flex-shrink: 0; }
 .admin-navigation, .inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
 .admin-navigation { margin-bottom: 1rem; }
-.admin-navigation button[aria-current="page"], .palette-list button[aria-checked="true"] { color: #244632; border-color: #a8bbac; background: #e5eee3; font-weight: 700; }
+.admin-navigation button[aria-current="page"] { color: #244632; border-color: #a8bbac; background: #e5eee3; font-weight: 700; }
 .workspace { display: grid; grid-template-columns: minmax(246px, 1fr) minmax(0, 2.1fr); gap: 1rem; align-items: start; }
 .content-workspace { grid-template-columns: minmax(246px, 1fr) minmax(0, 1.35fr); }
 .content-intro { margin-block: .65rem 1rem; }
 .notice-preview { display: grid; gap: .65rem; overflow-wrap: anywhere; }
-.notice-preview > .status { justify-self: start; }
 .notice-preview h3 { margin: 0; }
 .notice-preview p { white-space: pre-wrap; }
+.notice-preview .member-notice-preview { box-shadow: 0 8px 24px #21362d16; }
+.preview-acknowledge { padding: .6rem 1rem; border-radius: .55rem; color: white; background: var(--sage); font-weight: 650; }
 .content-feedback .message:not(.error) { color: #244632; background: #e5eee3; }
 .palette-panel { max-width: 640px; }
-.palette-list li { align-items: center; }
-.palette-list strong { display: flex; align-items: center; gap: .55rem; }
-.season-swatch { width: 1.2rem; aspect-ratio: 1; border: 1px solid #afb8aa; border-radius: 50%; background: #d8e6d3; }
-.season-swatch.summer { background: #eee2b5; }
-.season-swatch.autumn { background: #e6c4a4; }
-.season-swatch.winter { background: #cbdbe5; }
+.palette-schedule { border-top: 1px solid var(--line); }
+.palette-schedule summary { display: flex; gap: .6rem; justify-content: space-between; align-items: center; padding: .8rem 0; cursor: pointer; list-style: none; }
+.palette-schedule summary::-webkit-details-marker { display: none; }
+.palette-schedule summary::after { content: '⌄'; color: var(--muted); }
+.palette-schedule[open] summary::after { transform: rotate(180deg); }
+.schedule-summary { display: flex; align-items: center; gap: .75rem; flex: 1; }
+.schedule-summary .detail { display: block; }
+.schedule-swatches { display: flex; align-items: center; padding-left: .18rem; flex-shrink: 0; }
+.schedule-swatches i { width: 1rem; height: 1rem; border: 1px solid #fffefa; margin-left: -.18rem; border-radius: 50%; }
+.palette-schedule form { padding: .25rem 0 1rem; }
+.schedule-check { display: flex; align-items: center; gap: .5rem; width: fit-content; }
+.schedule-check input { width: 1.05rem; height: 1.05rem; min-height: 0; accent-color: var(--sage); }
+.schedule-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.schedule-dates input { min-width: 0; }
+.other-seasons { border-top: 1px solid var(--line); padding-top: .85rem; }
+.other-seasons > summary { font-weight: 650; cursor: pointer; margin-bottom: .45rem; }
+.admin-inbox { max-width: 760px; }
+.rating-admin-control { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin-block: .7rem 1rem; }
+.rating-admin-control > p { flex: 1 1 16rem; }
+.rating-admin-control [aria-checked="true"] { color: #254735; background: #e5eee3; border-color: #a8bbac; }
+.inbox-records { margin-block: .65rem; }
 .panel { padding: clamp(1rem, 3vw, 1.45rem); }
 .composer form { margin-top: 1.15rem; }
 .detail, .capacity { color: var(--muted); font-size: .875rem; }
@@ -114,4 +130,5 @@ form { display: grid; gap: .9rem; }
   .record-nav > button { margin-left: auto; }
   .filters { flex-wrap: wrap; }
   .filters label:first-child { flex-basis: 100%; }
+  .schedule-dates { grid-template-columns: 1fr; }
 }

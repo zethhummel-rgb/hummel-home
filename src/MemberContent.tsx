@@ -1,13 +1,14 @@
 import {useEffect,useState} from 'react';
-import {ChevronDown} from 'lucide-react';
 import {authNamespace} from './config';
+import MemberPopup from './MemberPopup';
+import NoticeCard from './NoticeCard';
 import {isSeasonalPalette,type SeasonalPaletteId} from './palettes';
 import {isCurrentAuthClient,supabase} from './supabase';
-import './member-content.css';
 
 type MemberNotice={id:string;kind:'notice'|'update';title:string;body:string;published_at:string};
-type MemberContent={notices:MemberNotice[];seasons:SeasonalPaletteId[]};
-const emptyContent:MemberContent={notices:[],seasons:[]};
+type MemberContent={notices:MemberNotice[];seasons:SeasonalPaletteId[];expiries:Partial<Record<SeasonalPaletteId,number>>;ratingEligible:boolean};
+type RatingInput={stars:number;comment:string;allow_quote:boolean};
+const emptyContent:MemberContent={notices:[],seasons:[],expiries:{},ratingEligible:false};
 
 function isMemberNotice(value:unknown):value is MemberNotice{
  if(!value||typeof value!=='object')return false;
@@ -29,13 +30,17 @@ export function useMemberContent(userId:string,enabled:boolean){
  const client=supabase;
  const [snapshot,setSnapshot]=useState<{client:typeof client;userId:string;content:MemberContent}|null>(null);
  const [dismissal,setDismissal]=useState(()=>({userId,ids:readDismissals(userId)}));
+ const [completedRatingFor,setCompletedRatingFor]=useState<string>();
+ const [themeClock,setThemeClock]=useState(()=>Date.now());
  const dismissed=dismissal.userId===userId?dismissal.ids:readDismissals(userId);
  const content=enabled&&snapshot?.client===client&&snapshot.userId===userId?snapshot.content:emptyContent;
 
  useEffect(()=>{
   if(!enabled)return;
   let active=true,loading=false;
+  let boundary:number|undefined;
   async function refresh(){
+   setThemeClock(Date.now());
    if(loading||document.hidden||!navigator.onLine||!isCurrentAuthClient(client))return;
    loading=true;
    try{
@@ -45,17 +50,30 @@ export function useMemberContent(userId:string,enabled:boolean){
     if(error||!active||!isCurrentAuthClient(client))return;
     const notices=Array.isArray(data?.notices)?data.notices.filter(isMemberNotice):[];
     const seasons=Array.isArray(data?.seasonal_palettes)?[...new Set<SeasonalPaletteId>(data.seasonal_palettes.filter(isSeasonalPalette))]:[];
-    setSnapshot({client,userId,content:{notices,seasons}});
+    const expiries:MemberContent['expiries']={};
+    for(const id of seasons){
+     const end=Date.parse(data?.palette_expiries?.[id]);
+     if(Number.isFinite(end))expiries[id]=end;
+    }
+    setSnapshot({client,userId,content:{notices,seasons,expiries,ratingEligible:data?.rating_eligible===true}});
+    window.clearTimeout(boundary);
+    const wait=Date.parse(data?.next_palette_change_at)-Date.now();
+    if(Number.isFinite(wait)&&wait>0)boundary=window.setTimeout(refresh,Math.min(wait+100,2_000_000_000));
    }catch{/* Notices and seasonal choices are optional when HH is offline or unavailable. */}
    finally{loading=false}
   }
   void refresh();
+  const poll=window.setInterval(()=>void refresh(),60_000);
   document.addEventListener('visibilitychange',refresh);
+  window.addEventListener('pageshow',refresh);
   window.addEventListener('focus',refresh);
   window.addEventListener('online',refresh);
   return()=>{
    active=false;
+   window.clearInterval(poll);
+   window.clearTimeout(boundary);
    document.removeEventListener('visibilitychange',refresh);
+   window.removeEventListener('pageshow',refresh);
    window.removeEventListener('focus',refresh);
    window.removeEventListener('online',refresh);
   };
@@ -75,26 +93,31 @@ export function useMemberContent(userId:string,enabled:boolean){
   try{localStorage.setItem(dismissalKey(userId),JSON.stringify(ids))}catch{/* Keep the dismissal for this visit. */}
  }
 
- return {notices:content.notices.filter(notice=>!dismissed.includes(notice.id)),seasons:content.seasons,dismiss};
+ async function completeRating(input?:RatingInput){
+  const {data:auth,error:authError}=await client.auth.getSession();
+  if(authError||auth.session?.user.id!==userId||!isCurrentAuthClient(client))throw Error('Open HH and sign in again to continue.');
+  const {data,error}=await client.rpc('hh_member_rating',{action:input?'submit':'dismiss',payload:input??{}});
+  if(error||data?.completed!==true||!isCurrentAuthClient(client))throw Error('HH could not save your choice. Please try again.');
+  setCompletedRatingFor(userId);
+ }
+
+ return {
+  notices:content.notices.filter(notice=>!dismissed.includes(notice.id)),
+  seasons:content.seasons.filter(id=>themeClock<(content.expiries[id]??Infinity)),
+  ratingEligible:content.ratingEligible&&completedRatingFor!==userId,
+  dismiss,completeRating,
+ };
 }
 
-const dateLabel=new Intl.DateTimeFormat('en-CA',{dateStyle:'medium'});
+export function MemberNotices({notices,ready,onDismiss}:{notices:MemberNotice[];ready:boolean;onDismiss:(id:string)=>void}){
+ const [openId,setOpenId]=useState<string>();
+ const notice=notices.find(item=>item.id===openId)??notices[0];
+ return ready&&notice?<NoticeDialog key={notice.id} notice={notice} onOpen={setOpenId} onDismiss={onDismiss}/>:null;
+}
 
-export function MemberNotices({notices,onDismiss}:{notices:MemberNotice[];onDismiss:(id:string)=>void}){
- if(!notices.length)return null;
- return <section className="member-notices" aria-label="Notices and updates from HH">
-  {notices.map(notice=><article className="member-notice" key={notice.id}>
-   <details>
-    <summary><span><small>{notice.kind==='update'?'HH update':'HH notice'}</small><b>{notice.title}</b></span><ChevronDown size={16} aria-hidden="true"/></summary>
-    <time dateTime={notice.published_at}>{dateLabel.format(new Date(notice.published_at))}</time>
-    <p>{notice.body}</p>
-   </details>
-   <button type="button" aria-label={`Dismiss ${notice.title}`} onClick={event=>{
-    const article=event.currentTarget.closest('article');
-    const sibling=article?.nextElementSibling||article?.previousElementSibling;
-    onDismiss(notice.id);
-    sibling?.querySelector('summary')?.focus();
-   }}>Dismiss</button>
-  </article>)}
- </section>;
+function NoticeDialog({notice,onOpen,onDismiss}:{notice:MemberNotice;onOpen:(id:string)=>void;onDismiss:(id:string)=>void}){
+ return <MemberPopup onOpen={()=>onOpen(notice.id)} onCancel={()=>onDismiss(notice.id)}>
+  {({headingId,headingRef})=><NoticeCard kind={notice.kind} title={notice.title} body={notice.body} publishedAt={notice.published_at} headingId={headingId} headingRef={headingRef}
+   action={<button className="button primary" type="button" onClick={()=>onDismiss(notice.id)}>Got it</button>}/>}
+ </MemberPopup>;
 }
