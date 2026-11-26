@@ -19,6 +19,8 @@ Hummel Home is the staging site for HH Family. Initial source baseline:
 
 Do not use a moving branch tip as proof of which version was tested. Compare the staged source with the current HH source; resolve intervening changes and retest before release. No automatic staging-to-production merge is configured.
 
+Set the next app release number in `src/releaseVersion.ts` before building a release. Start with `V2.1`, increment through `V2.9`, then use `V3.0`. Verify the deployed number in HH Admin and on **More → Notices & updates**. Use the same number when publishing its release notes in HH Admin.
+
 ## Isolation
 
 - Test builds reject the live backend and the live website path. Production builds reject the test project and test path.

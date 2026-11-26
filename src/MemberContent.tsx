@@ -1,11 +1,14 @@
 import {useEffect,useState} from 'react';
+import {ChevronDown} from 'lucide-react';
 import {authNamespace} from './config';
 import MemberPopup from './MemberPopup';
-import NoticeCard from './NoticeCard';
+import NoticeCard,{NoticeArtwork,type NoticeImage} from './NoticeCard';
+import {isNoticeImagePath,noticeImageBucket,noticeImageExtension,noticeImageMaxBytes} from './noticeImages';
 import {isSeasonalPalette,type SeasonalPaletteId} from './palettes';
 import {isCurrentAuthClient,supabase} from './supabase';
+import {appReleaseVersion,versionedNoticeTitle} from './releaseVersion';
 
-type MemberNotice={id:string;kind:'notice'|'update';title:string;body:string;published_at:string};
+type MemberNotice={id:string;kind:'notice'|'update';title:string;body:string;published_at:string;image_path?:string|null;image_alt?:string|null;release_version?:string|null};
 type MemberContent={notices:MemberNotice[];seasons:SeasonalPaletteId[];expiries:Partial<Record<SeasonalPaletteId,number>>;ratingEligible:boolean};
 type RatingInput={stars:number;comment:string;allow_quote:boolean};
 const emptyContent:MemberContent={notices:[],seasons:[],expiries:{},ratingEligible:false};
@@ -109,15 +112,133 @@ export function useMemberContent(userId:string,enabled:boolean){
  };
 }
 
-export function MemberNotices({notices,ready,onDismiss}:{notices:MemberNotice[];ready:boolean;onDismiss:(id:string)=>void}){
+export function MemberNotices({notices,ready,userId,onDismiss}:{notices:MemberNotice[];ready:boolean;userId:string;onDismiss:(id:string)=>void}){
  const [openId,setOpenId]=useState<string>();
  const notice=notices.find(item=>item.id===openId)??notices[0];
- return ready&&notice?<NoticeDialog key={notice.id} notice={notice} onOpen={setOpenId} onDismiss={onDismiss}/>:null;
+ return ready&&notice?<NoticeDialog key={`${userId}:${notice.id}`} userId={userId} notice={notice} onOpen={setOpenId} onDismiss={onDismiss}/>:null;
 }
 
-function NoticeDialog({notice,onOpen,onDismiss}:{notice:MemberNotice;onOpen:(id:string)=>void;onDismiss:(id:string)=>void}){
- return <MemberPopup onOpen={()=>onOpen(notice.id)} onCancel={()=>onDismiss(notice.id)}>
-  {({headingId,headingRef})=><NoticeCard kind={notice.kind} title={notice.title} body={notice.body} publishedAt={notice.published_at} headingId={headingId} headingRef={headingRef}
+function useNoticeImage(userId:string,notice:MemberNotice):NoticeImage|undefined{
+ const client=supabase;
+ const path=isNoticeImagePath(notice.image_path,notice.id)?notice.image_path:undefined;
+ const alt=typeof notice.image_alt==='string'&&notice.image_alt.trim()?notice.image_alt:notice.title;
+ const [result,setResult]=useState<{client:typeof client;path:string;url?:string}>();
+
+ useEffect(()=>{
+  if(!path)return;
+  const objectPath=path;
+  let active=true;
+  let url:string|undefined;
+  async function load(){
+   try{
+    const {data:auth,error:authError}=await client.auth.getSession();
+    if(!active||!isCurrentAuthClient(client))return;
+    if(authError||auth.session?.user.id!==userId)throw Error('Sign-in changed.');
+    const {data,error}=await client.storage.from(noticeImageBucket).download(objectPath);
+    if(!active||!isCurrentAuthClient(client))return;
+    if(error||!data||!noticeImageExtension(data.type)||data.size>noticeImageMaxBytes)throw Error('Could not load announcement image.');
+    url=URL.createObjectURL(data);
+    setResult({client,path:objectPath,url});
+   }catch{
+    if(active&&isCurrentAuthClient(client))setResult({client,path:objectPath});
+   }
+  }
+  void load();
+  return()=>{
+   active=false;
+   if(url)URL.revokeObjectURL(url);
+  };
+ },[client,path,userId]);
+
+ if(!path)return undefined;
+ if(result?.client!==client||result.path!==path)return {alt,state:'loading'};
+ return result.url?{alt,url:result.url}:{alt,state:'error'};
+}
+
+function NoticeDialog({notice,userId,onOpen,onDismiss}:{notice:MemberNotice;userId:string;onOpen:(id:string)=>void;onDismiss:(id:string)=>void}){
+ const image=useNoticeImage(userId,notice);
+ return <MemberPopup className={image?'has-image':undefined} onOpen={()=>onOpen(notice.id)} onCancel={()=>onDismiss(notice.id)}>
+  {({headingId,headingRef})=><NoticeCard kind={notice.kind} title={notice.title} body={notice.body} publishedAt={notice.published_at} releaseVersion={notice.release_version} headingId={headingId} headingRef={headingRef} image={image}
    action={<button className="button primary" type="button" onClick={()=>onDismiss(notice.id)}>Got it</button>}/>}
  </MemberPopup>;
+}
+
+const historyDate=new Intl.DateTimeFormat('en-CA',{dateStyle:'medium'});
+type HistoryCursor=Pick<MemberNotice,'id'|'published_at'>;
+
+export function MemberNoticeHistory({userId}:{userId:string}){
+ const client=supabase;
+ const [request,setRequest]=useState<{after?:HistoryCursor}>({});
+ const [notices,setNotices]=useState<MemberNotice[]>([]);
+ const [hasMore,setHasMore]=useState(false);
+ const [busy,setBusy]=useState(true);
+ const [error,setError]=useState('');
+
+ useEffect(()=>{
+  let active=true;
+  async function load(){
+   try{
+    const {data:auth,error:authError}=await client.auth.getSession();
+    if(!active||!isCurrentAuthClient(client))return;
+    if(authError||auth.session?.user.id!==userId)throw Error('Sign-in changed.');
+    const args=request.after?{before_published_at:request.after.published_at,before_id:request.after.id}:{};
+    const {data,error}=await client.rpc('hh_member_notice_history',args);
+    if(!active||!isCurrentAuthClient(client))return;
+    if(error||!Array.isArray(data?.notices)||!data.notices.every(isMemberNotice))throw Error('History unavailable.');
+    const rows:MemberNotice[]=data.notices;
+    setNotices(previous=>request.after?[...previous,...rows]:rows);
+    setHasMore(data.has_more===true&&rows.length>0);
+   }catch{
+    if(active&&isCurrentAuthClient(client))setError('Could not load notices. Check your connection and try again.');
+   }finally{
+    if(active&&isCurrentAuthClient(client))setBusy(false);
+   }
+  }
+  void load();
+  return()=>{active=false};
+ },[client,request,userId]);
+
+ function getPage(after?:HistoryCursor){
+  setBusy(true);
+  setError('');
+  setRequest({after});
+ }
+ return <div className="member-notice-history">
+  <div className="notice-history-intro">
+   <p>Read past announcements and see what changed in HH.</p>
+   <p className="notice-current-version">App version on this device <strong>{appReleaseVersion}</strong></p>
+  </div>
+  {notices.length>0&&<ul aria-label="Published notices and updates">
+   {notices.map(notice=><li key={notice.id}><HistoryNotice notice={notice} userId={userId}/></li>)}
+  </ul>}
+  {busy&&<p className="settings-caption" role="status">{request.after?'Loading earlier posts…':'Loading notices and updates…'}</p>}
+  {error&&<>
+   <p className="error" role="alert">{error}</p>
+   <button className="button soft" type="button" onClick={()=>getPage(request.after)}>Try again</button>
+  </>}
+  {!busy&&!error&&notices.length===0&&<p className="settings-caption">Announcements and app updates will appear here.</p>}
+  {hasMore&&!error&&<button className="button soft" type="button" disabled={busy} onClick={()=>getPage(notices.at(-1))}>Load earlier posts</button>}
+ </div>;
+}
+
+function HistoryNotice({notice,userId}:{notice:MemberNotice;userId:string}){
+ const [expanded,setExpanded]=useState(false);
+ return <details className="notice-history-entry" onToggle={event=>setExpanded(event.currentTarget.open)}>
+  <summary>
+   <span className="notice-history-heading">
+    <span>{notice.kind==='update'?'App update':'Notice'} · <time dateTime={notice.published_at}>{historyDate.format(new Date(notice.published_at))}</time></span>
+    <strong>{versionedNoticeTitle(notice.title,notice.release_version)}</strong>
+   </span>
+   <ChevronDown size={18} aria-hidden="true"/>
+  </summary>
+  {expanded&&<div className="notice-history-content">
+   {notice.image_path&&<HistoryArtwork userId={userId} notice={notice}/>}
+   {notice.body&&<p>{notice.body}</p>}
+  </div>}
+ </details>;
+}
+
+function HistoryArtwork({notice,userId}:{notice:MemberNotice;userId:string}){
+ const image=useNoticeImage(userId,notice);
+ return image?<NoticeArtwork image={image}/>:null;
 }

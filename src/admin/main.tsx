@@ -1,6 +1,8 @@
 import {lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
+import {ArrowUpRight, Bell, LogOut, MessageSquare, Palette, Star, Ticket} from 'lucide-react';
 import {testEnvironment} from '../config';
+import {appReleaseVersion} from '../releaseVersion';
 import {
   createPilotInvitation, familyAppUrl, getAdminStatus, getDashboard,
   pilotInvitationUrl, sendPilotInvitation, standaloneAdminClient,
@@ -76,7 +78,8 @@ function HHAdmin() {
       <div className="shell masthead-inner">
         <div className="brand"><img src={logo} alt="" width="35" height="35" /><span>HH Admin</span></div>
         {testEnvironment && <span className="environment">TEST</span>}
-        <a className="home-link" href={familyAppUrl.href}>Open HH <span aria-hidden="true">↗</span></a>
+        <span className="admin-version" aria-label={`App version ${appReleaseVersion}`}>{appReleaseVersion}</span>
+        <a className="home-link" href={familyAppUrl.href}>Open HH <ArrowUpRight size={15} aria-hidden="true" /></a>
       </div>
     </header>
     {testEnvironment ? <Suspense fallback={<CheckingAccess />}>
@@ -236,11 +239,11 @@ function Status({value}: {value: RequestStatus}) {
 const emailStatus: Record<string, string> = {sent: 'Email submitted', sending: 'Email sending', failed: 'Email unconfirmed'};
 
 const adminViews = [
-  {id: 'pilot', label: 'Pilot access'},
-  {id: 'notices', label: 'Notices & updates'},
-  {id: 'palettes', label: 'Seasonal palettes'},
-  {id: 'feedback', label: 'Feedback & ideas'},
-  {id: 'ratings', label: 'App ratings'},
+  {id: 'pilot', label: 'Pilot access', icon: Ticket, description: 'Review requests to join HH and track household invitations.'},
+  {id: 'notices', label: 'Notices & updates', icon: Bell, description: 'Preview and publish pop-ups that members see when they open HH.'},
+  {id: 'palettes', label: 'Seasonal palettes', icon: Palette, description: 'Choose which seasonal and holiday themes members can use and when.'},
+  {id: 'feedback', label: 'Feedback & ideas', icon: MessageSquare, description: 'Read feedback and ideas submitted by members.'},
+  {id: 'ratings', label: 'App ratings', icon: Star, description: 'Manage the one-time rating prompt and review responses.'},
 ] as const;
 type AdminView = typeof adminViews[number]['id'];
 
@@ -248,21 +251,29 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
   const [view, setView] = useState<AdminView>('pilot');
   const [contentView, setContentView] = useState<'notices' | 'palettes'>();
   const [error, setError] = useState('');
+  const activeView = adminViews.find((tab) => tab.id === view) ?? adminViews[0];
   return <main className="shell dashboard">
-    <div className="dashboard-heading">
-      <h1>{adminViews.find((tab) => tab.id === view)?.label}</h1>
-      {signOut && <button type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}>Sign out</button>}
-    </div>
-    <nav className="admin-navigation" aria-label="Admin Dashboard">
-      {adminViews.map((tab) => <button type="button" key={tab.id} aria-current={tab.id === view ? 'page' : undefined} onClick={() => {
-        setView(tab.id);
-        if (tab.id === 'notices' || tab.id === 'palettes') setContentView(tab.id);
-      }}>{tab.label}</button>)}
-    </nav>
+    <header className="dashboard-header">
+      <div className="dashboard-heading">
+        <div>
+          <h1 id="admin-workspace-heading">{activeView.label}</h1>
+          <p>{activeView.description}</p>
+        </div>
+        {signOut && <button className="admin-sign-out" type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}><LogOut size={17} aria-hidden="true" /> Sign out</button>}
+      </div>
+      <nav className="admin-navigation" aria-label="Admin Dashboard">
+        {adminViews.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-controls="admin-workspace-panel" aria-current={id === view ? 'page' : undefined} onClick={() => {
+          setView(id);
+          if (id === 'notices' || id === 'palettes') setContentView(id);
+        }}><Icon size={17} aria-hidden="true" /><span>{label}</span></button>)}
+      </nav>
+    </header>
     {error && <p className="message error" role="alert">{error}</p>}
-    <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
-    {contentView && <div hidden={view !== 'notices' && view !== 'palettes'}><ContentPanel view={contentView} getClient={getClient} /></div>}
-    {(view === 'feedback' || view === 'ratings') && <Inbox key={view} view={view} getClient={getClient} />}
+    <section id="admin-workspace-panel" aria-labelledby="admin-workspace-heading">
+      <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
+      {contentView && <div hidden={view !== 'notices' && view !== 'palettes'}><ContentPanel view={contentView} getClient={getClient} /></div>}
+      {(view === 'feedback' || view === 'ratings') && <Inbox key={view} view={view} getClient={getClient} />}
+    </section>
   </main>;
 }
 

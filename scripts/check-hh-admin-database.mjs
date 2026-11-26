@@ -20,6 +20,7 @@ const status=()=>value('select public.hh_admin_status()');
 const dashboard=(action,payload={})=>value('select public.hh_admin_dashboard($1,$2)',[action,payload]);
 const content=(action,payload={})=>value('select public.hh_admin_content($1,$2)',[action,payload]);
 const memberContent=()=>value('select public.hh_member_content()');
+const noticeHistory=(before=null,id=null)=>value('select public.hh_member_notice_history($1,$2)',[before,id]);
 const memberRating=(action,payload={})=>value('select public.hh_member_rating($1,$2)',[action,payload]);
 const adminRatings=(action,payload={})=>value('select public.hh_admin_ratings($1,$2)',[action,payload]);
 const dateInToronto=(offset)=>value("select ((now() at time zone 'America/Toronto')::date+$1::int)::text",[offset]);
@@ -34,6 +35,16 @@ try{
   create function auth.jwt() returns jsonb language sql stable as $$select current_setting('request.jwt.claims',true)::jsonb$$;
   create function auth.uid() returns uuid language sql stable as $$select (auth.jwt()->>'sub')::uuid$$;
   grant execute on function auth.uid(),auth.jwt() to authenticated;`);
+ // Match the Storage catalog columns used by HH and simulate older permissive bucket policies.
+ await db.exec(`create schema storage;grant usage on schema storage to anon,authenticated;
+  create table storage.buckets(id text primary key,name text not null,public boolean not null default false,file_size_limit bigint,allowed_mime_types text[]);
+  create table storage.objects(bucket_id text references storage.buckets(id),name text,metadata jsonb,primary key(bucket_id,name));
+  create function storage.allow_any_operation(operations text[]) returns boolean language sql stable as $$
+   select coalesce(current_setting('fixture.storage.operation',true)=any(operations),false)
+  $$;
+  alter table storage.objects enable row level security;
+  grant select,insert,update,delete on storage.objects to anon,authenticated;
+  create policy fixture_other_buckets on storage.objects for all to anon,authenticated using (true) with check (true);`);
  for(const name of ['schema','calendar','member-colours','pilot','pilot-seven-spots','pilot-fourteen-spots','invitation-email']){
   await db.exec(read(`database/${name}.sql`));
  }
@@ -47,6 +58,13 @@ try{
  ]);
  await db.exec('delete from private.hh_seasonal_palettes');
  await db.exec(read('supabase/migrations/20261126234000_hh_member_ratings.sql'));
+ await db.exec(read('supabase/migrations/20261126235000_hh_notice_images.sql'));
+ const legacyPost={id:uid(48),kind:'update',title:'Earlier release',body:'Published before release versions.'};
+ const insertLegacyPost=()=>db.query('insert into private.hh_app_notices(id,kind,title,body) values($1,$2,$3,$4)',Object.values(legacyPost));
+ await insertLegacyPost();
+ await db.exec(read('supabase/migrations/20261126235500_hh_notice_history_version.sql'));
+ assert.equal(await value('select release_version from private.hh_app_notices where id=$1',[legacyPost.id]),null);
+ await db.query('delete from private.hh_app_notices where id=$1',[legacyPost.id]);
  for(const [role,id] of Object.entries(roles))await db.query('insert into auth.users values($1,$2,now())',[id,email(role)]);
  for(const role of ['host','otherHost'])await db.query('insert into private.pilot_hosts values($1)',[email(role)]);
 
@@ -153,7 +171,7 @@ try{
  await assert.rejects(value("select public.create_pilot_household($1,'Replay','Invitee')",[token]));
 
  const memo={id:uid(20),kind:'notice',title:' Community notice ',body:'Next weekend\nBring your calendar. '};
- const release={id:uid(21),kind:'update',title:'What’s new',body:'New colors are available.'};
+ const release={id:uid(21),kind:'update',title:'What’s new',body:'New colors are available.',release_version:'V2.1'};
  const emptyContent={notices:[],seasonal_palettes:[],palette_expiries:{},next_palette_change_at:null,rating_eligible:false};
  const paletteIds=['spring','summer','autumn','winter','easter','halloween','christmas','thanksgiving'];
  const emptyAdminContent={notices:[],seasonal_palettes:[],palette_schedule:paletteIds.map(palette=>({palette,enabled:false,starts_on:null,stops_on:null}))};
@@ -177,7 +195,9 @@ try{
  await assert.rejects(content('set_palette',{palette:'blush',enabled:true}),/Choose a seasonal palette/);
  await assert.rejects(content('set_palette',{palette:'spring',enabled:'true'}),/Choose a seasonal palette/);
  const initialNotice=(await content('publish_notice',memo)).notices[0];
- assert.deepEqual(Object.keys(initialNotice).sort(),['archived_at','body','id','kind','published_at','title']);
+ assert.deepEqual(Object.keys(initialNotice).sort(),['archived_at','body','id','image_alt','image_path','kind','published_at','release_version','title']);
+ assert.equal(initialNotice.image_path,null);
+ assert.equal(initialNotice.image_alt,null);
  assert.equal(initialNotice.title,'Community notice');
  assert.equal(initialNotice.body,'Next weekend\nBring your calendar.');
  assert.equal(initialNotice.archived_at,null);
@@ -192,7 +212,7 @@ try{
  const ownerContent=await memberContent();
  assert.deepEqual(ownerContent.seasonal_palettes,['spring','winter']);
  assert.deepEqual(ownerContent.notices.map(row=>row.kind).sort(),['notice','update']);
- assert.deepEqual(Object.keys(ownerContent.notices[0]).sort(),['body','id','kind','published_at','title']);
+ assert.deepEqual(Object.keys(ownerContent.notices[0]).sort(),['body','id','image_alt','image_path','kind','published_at','release_version','title']);
  await assert.rejects(content('snapshot'),/Admin access required/);
  await as('invitee');
  assert.deepEqual(await memberContent(),ownerContent);
@@ -426,6 +446,140 @@ try{
  await assert.rejects(memberRating('dismiss'),/permission denied/);
  await assert.rejects(adminRatings('snapshot'),/permission denied/);
  console.log('HH ratings passed: opt-in prompt availability, immutable per-account completion, optional comment and quote permission, anonymous-to-admin records, and stable pagination.');
+
+ await db.exec('reset role;update private.hh_admin_auth_policy set require_mfa=true;');
+ const bucket=(await db.query("select public,file_size_limit,allowed_mime_types from storage.buckets where id='hh-notice-images'")).rows[0];
+ assert.deepEqual(bucket,{public:false,file_size_limit:5242880,allowed_mime_types:['image/jpeg','image/png','image/webp']});
+ await db.exec("insert into storage.buckets(id,name) values('other','other');insert into storage.objects(bucket_id,name) values('other','unchanged');");
+ const imageNotice=uid(40),imagePath=`${imageNotice}/artwork.webp`,sparePath=`${uid(41)}/artwork.jpg`;
+ const imagePost={id:imageNotice,kind:'notice',title:'A picture for HH',body:'',image_path:imagePath,image_alt:' A festive front door '};
+ const storageOperation=async(operation,sql,args)=>{
+  await db.query("select set_config('fixture.storage.operation',$1,false)",[operation]);
+  return (await db.query(sql,args)).rows;
+ };
+ const insertImage=(name,operation='object.upload')=>storageOperation(operation,"insert into storage.objects(bucket_id,name) values('hh-notice-images',$1) returning name",[name]);
+ const readImage=(name,operation='object.get_authenticated')=>storageOperation(operation,"select name from storage.objects where bucket_id='hh-notice-images' and name=$1",[name]);
+ const removeImage=(name)=>storageOperation('object.delete_many',"delete from storage.objects where bucket_id='hh-notice-images' and name=$1 returning name",[name]);
+ const editImage=(name)=>storageOperation('object.upload_update',"update storage.objects set metadata='{}' where bucket_id='hh-notice-images' and name=$1 returning name",[name]);
+ await as('secondAdmin');
+ await assert.rejects(insertImage(imagePath),/row-level security/);
+ await assert.rejects(content('publish_notice',imagePost),/Verify your second factor/);
+ await as('secondAdmin','aal2');
+ await assert.rejects(content('publish_notice',imagePost),/Upload the image before publishing/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_path:sparePath}),/valid image/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_alt:' '}),/1 to 300 characters/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_alt:'a'.repeat(301)}),/1 to 300 characters/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_alt:'Two\nlines'}),/1 to 300 characters/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_path:null}),/description requires/);
+ await assert.rejects(content('publish_notice',{...imagePost,image_path:null,image_alt:null}),/Enter a message/);
+ await assert.rejects(insertImage(`${imageNotice}/artwork.svg`),/row-level security/);
+ await assert.rejects(insertImage(`${imageNotice.toUpperCase()}/Artwork.webp`),/row-level security/);
+ await assert.rejects(insertImage(`${imageNotice}/nested/artwork.webp`),/row-level security/);
+ await assert.rejects(insertImage(sparePath,'object.sign_upload_url'),/row-level security/);
+ assert.deepEqual(await insertImage(imagePath),[{name:imagePath}]);
+ assert.deepEqual(await insertImage(sparePath),[{name:sparePath}]);
+ assert.deepEqual(await editImage(sparePath),[{name:sparePath}]);
+ assert.deepEqual(await removeImage(sparePath),[{name:sparePath}]);
+ assert.deepEqual(await readImage(imagePath),[{name:imagePath}]);
+ await as('owner');
+ assert.deepEqual(await readImage(imagePath),[]);
+ assert.deepEqual(await removeImage(imagePath),[]);
+ await assert.rejects(insertImage(sparePath),/row-level security/);
+ await as('secondAdmin','aal2');
+ const art=(await content('publish_notice',imagePost)).notices.find(row=>row.id===imageNotice);
+ assert.equal(art.body,'');
+ assert.equal(art.image_path,imagePath);
+ assert.equal(art.image_alt,'A festive front door');
+ assert.deepEqual((await content('publish_notice',imagePost)).notices.find(row=>row.id===imageNotice),art);
+ await assert.rejects(content('publish_notice',{...imagePost,image_alt:'Different description'}),/already published with different content/);
+ assert.deepEqual(await editImage(imagePath),[]);
+ assert.deepEqual(await removeImage(imagePath),[]);
+ await assert.rejects(insertImage(`${imageNotice}/artwork.png`),/row-level security/);
+ await as('owner');
+ assert.deepEqual(await readImage(imagePath),[{name:imagePath}]);
+ assert.deepEqual(await readImage(imagePath,'object.get_authenticated_info'),[{name:imagePath}]);
+ assert.deepEqual(await readImage(imagePath,'object.list'),[]);
+ assert.deepEqual(await readImage(imagePath,'object.sign'),[]);
+ assert.deepEqual(await readImage(imagePath,'object.sign_many'),[]);
+ assert.equal((await memberContent()).notices.find(row=>row.id===imageNotice).image_path,imagePath);
+ await db.exec('reset role;');
+ await db.query('update auth.users set email_confirmed_at=null where id=$1',[roles.owner]);
+ await as('owner');
+ assert.deepEqual(await readImage(imagePath),[]);
+ await db.exec('reset role;');
+ await db.query('update auth.users set email_confirmed_at=now() where id=$1',[roles.owner]);
+ await as('unapprovedAlias');
+ assert.deepEqual(await readImage(imagePath),[]);
+ await db.exec('reset role;set role anon;');
+ assert.deepEqual(await readImage(imagePath),[]);
+ assert.equal(await value("select name from storage.objects where bucket_id='other'"),'unchanged');
+ await as('secondAdmin','aal2');
+ assert.deepEqual(await readImage(imagePath,'object.list'),[{name:imagePath}]);
+ assert.deepEqual(await readImage(imagePath,'object.sign'),[]);
+ await content('archive_notice',{id:imageNotice});
+ assert.deepEqual(await readImage(imagePath),[{name:imagePath}]);
+ assert.deepEqual(await removeImage(imagePath),[]);
+ await as('owner');
+ assert.deepEqual(await readImage(imagePath),[]);
+ assert.equal((await memberContent()).notices.some(row=>row.id===imageNotice),false);
+ await as('secondAdmin');
+ assert.deepEqual(await readImage(imagePath),[]);
+ await db.exec('reset role;update private.hh_admin_auth_policy set require_mfa=false;');
+ await as('secondAdmin');
+ assert.deepEqual(await readImage(imagePath),[{name:imagePath}]);
+ assert.deepEqual(await insertImage(sparePath),[{name:sparePath}]);
+ console.log('HH notice images passed: private bucket settings, exact draft names, required image descriptions, image-only publication, idempotency, protected published artwork, confirmed member visibility, archive restrictions, and TEST admin policy.');
+
+ await db.exec('reset role;');
+ await insertLegacyPost();
+ await db.exec(`insert into private.hh_app_notices(id,kind,title,body,published_at)
+  select ('55555555-5555-4555-8555-'||lpad(number::text,12,'0'))::uuid,'notice',concat('Past fixture ',number),'Archived by neither member nor admin.','2000-01-01T00:00:00Z'
+  from generate_series(1,26) number;`);
+ await as('secondAdmin');
+ const versionedPath=`${uid(45)}/artwork.jpg`;
+ const versionedUpdate={id:uid(45),kind:'update',title:'A calendar refresh',body:'',image_path:versionedPath,image_alt:'Calendar on a sunny shelf'};
+ for(const invalid of [undefined,null,'v02.1','V2.10','V2.x','V1000000.1',2.1]){
+  await assert.rejects(content('publish_notice',{...versionedUpdate,release_version:invalid}),/release version like V2.1/);
+ }
+ await assert.rejects(content('publish_notice',{...imagePost,release_version:'V2.2'}),/versions are for app updates/);
+ await assert.rejects(content('publish_notice',{...versionedUpdate,release_version:'V3.0'}),/Upload the image before publishing/);
+ await insertImage(versionedPath);
+ const versioned=(await content('publish_notice',{...versionedUpdate,release_version:'  v3.0  '})).notices.find(row=>row.id===versionedUpdate.id);
+ assert.equal(versioned.title,versionedUpdate.title);
+ assert.equal(versioned.release_version,'V3.0');
+ assert.equal(versioned.image_path,versionedPath);
+ assert.deepEqual((await content('publish_notice',{...versionedUpdate,release_version:'V3.0'})).notices.find(row=>row.id===versionedUpdate.id),versioned);
+ await assert.rejects(content('publish_notice',{...versionedUpdate,release_version:'V3.1'}),/already published with different content/);
+ assert.equal((await content('publish_notice',legacyPost)).notices.find(row=>row.id===legacyPost.id).release_version,null);
+ await assert.rejects(noticeHistory(),/Confirmed household membership required/);
+ await as('owner');
+ const ownerVersion=(await memberContent()).notices.find(row=>row.id===versionedUpdate.id);
+ assert.equal(ownerVersion.release_version,'V3.0');
+ assert.equal('archived_at' in ownerVersion,false);
+ const historyFirstPage=await noticeHistory();
+ assert.equal(historyFirstPage.has_more,true);
+ assert.equal(historyFirstPage.notices.length,20);
+ assert.equal(historyFirstPage.notices.find(row=>row.id===legacyPost.id).release_version,null);
+ assert.equal(historyFirstPage.notices.find(row=>row.id===versionedUpdate.id).image_path,versionedPath);
+ const lastHistory=historyFirstPage.notices.at(-1);
+ const historyNextPage=await noticeHistory(lastHistory.published_at,lastHistory.id);
+ assert.equal(historyNextPage.has_more,false);
+ const historyRows=[...historyFirstPage.notices,...historyNextPage.notices];
+ assert.equal(historyRows.length,29);
+ assert.equal(new Set(historyRows.map(row=>row.id)).size,29);
+ assert.equal(historyRows.some(row=>row.id===memo.id||row.id===imageNotice),false);
+ assert.deepEqual(Object.keys(historyRows[0]).sort(),['body','id','image_alt','image_path','kind','published_at','release_version','title']);
+ await assert.rejects(noticeHistory(null,lastHistory.id),/Invalid notice history cursor/);
+ await assert.rejects(noticeHistory('infinity',lastHistory.id),/Invalid notice history cursor/);
+ await as('invitee');
+ assert.deepEqual(await noticeHistory(),historyFirstPage);
+ await db.exec('reset role;');
+ await db.query('update auth.users set email_confirmed_at=null where id=$1',[roles.invitee]);
+ await as('invitee');
+ await assert.rejects(noticeHistory(),/Confirmed household membership required/);
+ await db.exec('reset role;set role anon;');
+ await assert.rejects(noticeHistory(),/permission denied/);
+ console.log('HH notice history and versions passed: legacy rows, normalized releases, idempotency, image updates, confirmed member access, archive exclusion, and stable pagination.');
  console.log('HH admin policy checks passed: MFA required by default and on missing settings, explicit TEST opt-out, private setting, and exact identity authorization.');
  console.log('HH admin database checks passed: exact identity grants, existing host access and separate MFA, shared pilot seats and mail claims, old and new invitation redemption, atomic request capture, preview, deduplication and expiry.');
  console.log('HH content checks passed: confirmed household-reader scope, explicit admin publication, idempotent retries, archives, seasonal availability, and restricted database grants.');

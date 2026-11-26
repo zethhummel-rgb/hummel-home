@@ -23,6 +23,22 @@ const feedbackFixtures=[
  {id:'issue-fixture',area:'Calendar',message:'The reminder time was hard to see.',created_at:'2026-11-28T17:00:00Z'},
  {id:'idea-fixture',area:'New Feature Suggestion',message:'Add a family birthday view.',created_at:'2026-11-27T17:00:00Z'},
 ];
+const noticeImageBucket='hh-notice-images';
+const imageNotices=[
+ {id:'33333333-3333-4333-8333-333333333331',kind:'notice',title:'Photo-only fixture notice',body:'',
+  published_at:'2026-11-28T17:00:00Z',image_path:'33333333-3333-4333-8333-333333333331/artwork.png',image_alt:'Green and gold pixels in a checkerboard.'},
+ {id:'33333333-3333-4333-8333-333333333332',kind:'update',title:'Unavailable fixture image',body:'',
+  published_at:'2026-11-28T16:00:00Z',image_path:'33333333-3333-4333-8333-333333333332/artwork.png',image_alt:'Archived green and gold checkerboard.'},
+];
+const noticePng=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMwDXX5cjKV4cvJVNNQFwAqLgXhW7KSRAAAAABJRU5ErkJggg==','base64');
+const noticeHistory=[
+ {id:'33333333-3333-4333-8333-333333333341',kind:'update',title:'Fictional family calendar update',body:'The family calendar has a new test view.',
+  release_version:'V2.1',published_at:'2026-11-27T17:00:00Z'},
+ {id:'33333333-3333-4333-8333-333333333342',kind:'notice',title:'Fictional service announcement',body:'The test service is available again.',
+  published_at:'2026-11-26T17:00:00Z'},
+];
+const festivePalettes={spring:'Spring Garden',summer:'Summer Shore',easter:'Easter',halloween:'Halloween',thanksgiving:'Thanksgiving',christmas:'Christmas'};
+const seasonalPaletteIds=['spring','summer','autumn','winter','easter','halloween','thanksgiving','christmas'];
 
 async function checkAdminBlocked(page){
  await page.getByRole('heading',{name:'Open HH to use Admin',exact:true}).waitFor();
@@ -99,6 +115,197 @@ async function checkMemberContent(page,setSeasons,setNotices){
  await notice.getByRole('button',{name:'Got it',exact:true}).click();
  await today.waitFor();
  assert.equal(await notice.count()+await update.count(),0,'Acknowledged posts stay closed on reload');
+}
+
+async function checkMemberNoticeImages(page,storageRequests){
+ await page.setViewportSize({width:320,height:650});
+ const notice=page.getByRole('dialog',{name:'Notice',exact:true});
+ const update=page.getByRole('dialog',{name:'App update',exact:true});
+ const image=notice.getByRole('img',{name:imageNotices[0].image_alt,exact:true});
+ await image.waitFor();
+ assert.equal(await image.evaluate(async node=>{await node.decode();return node.naturalWidth}),2);
+ const gotIt=notice.getByRole('button',{name:'Got it',exact:true});
+ const imageBounds=await image.boundingBox();
+ const actionBounds=await gotIt.boundingBox();
+ assert.ok(imageBounds&&actionBounds&&imageBounds.y+imageBounds.height<=actionBounds.y,
+  'Photo-only popups have visible artwork above the acknowledgement button');
+ assert.ok(await notice.evaluate(node=>{const bounds=node.getBoundingClientRect();return bounds.left>=0&&bounds.right<=innerWidth&&node.scrollWidth<=node.clientWidth+1}));
+ assert.equal(await update.count(),0);
+ await gotIt.click();
+ await update.getByText(imageNotices[1].image_alt,{exact:true}).waitFor();
+ await update.getByText('Loading image…',{exact:true}).waitFor({state:'detached'});
+ assert.equal(await update.getByRole('img').count(),0,'A storage failure has visible alternative text');
+ await update.getByRole('button',{name:'Got it',exact:true}).click();
+ await update.waitFor({state:'detached'});
+ assert.deepEqual(storageRequests,
+  imageNotices.map(item=>({method:'GET',path:`/storage/v1/object/${noticeImageBucket}/${item.image_path}`})));
+ await page.reload();
+ await page.getByRole('heading',{name:'Today & coming up',exact:true}).waitFor();
+ const dismissed=await page.evaluate(userId=>JSON.parse(localStorage.getItem('hh-test:hh:member-notice-dismissals:'+userId)||'[]'),user.id);
+ assert.deepEqual(dismissed,imageNotices.map(item=>item.id));
+ assert.equal(await notice.count()+await update.count(),0,'Dismissed image notices do not reopen');
+}
+
+async function checkAdminNoticeImage(page,noticeWrites,storageRequests){
+ await page.getByRole('button',{name:'Notices & updates',exact:true}).click();
+ const compose=page.getByRole('region',{name:'Write a notice'});
+ await compose.getByRole('combobox',{name:'Notice type'}).selectOption('update');
+ const title='Fictional image-only update';
+ const releaseVersion='V2.2';
+ const imageAlt='Two green and gold squares.';
+ const versionInput=compose.getByRole('textbox',{name:'App version',exact:true});
+ assert.equal(await versionInput.inputValue(),'V2.1');
+ await versionInput.fill(' v2.2 ');
+ await compose.getByRole('textbox',{name:/Title/i}).fill(title);
+ await compose.locator('input[type="file"]').setInputFiles({name:'fixture-notice.png',mimeType:'image/png',buffer:noticePng});
+ await compose.getByRole('textbox',{name:/image description|alt text/i}).fill(imageAlt);
+ await compose.getByRole('button',{name:'Preview notice',exact:true}).click();
+ const preview=compose.locator('.member-notice-preview');
+ const image=preview.getByRole('img',{name:imageAlt,exact:true});
+ assert.equal(await image.evaluate(async node=>{await node.decode();return node.naturalWidth}),2);
+ await preview.getByRole('heading',{name:`${releaseVersion} · ${title}`,exact:true}).waitFor();
+ await preview.getByText('Got it',{exact:true}).waitFor();
+ assert.equal(storageRequests.length,0,'Preview does not upload an image');
+ assert.equal(noticeWrites.length,0,'Preview does not publish a notice');
+
+ await compose.getByRole('button',{name:'Publish notice',exact:true}).click();
+ await page.getByRole('status').filter({hasText:'Published in HH.'}).waitFor();
+ assert.equal(noticeWrites.length,1);
+ assert.equal(storageRequests.length,1);
+ const {payload}=noticeWrites[0];
+ assert.match(payload.id,/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+ const imagePath=payload.id+'/artwork.png';
+ assert.deepEqual(noticeWrites[0],{
+  action:'publish_notice',
+  payload:{id:payload.id,kind:'update',title,body:'',image_path:imagePath,image_alt:imageAlt,release_version:releaseVersion},
+ });
+ assert.deepEqual(storageRequests[0],{method:'POST',path:`/storage/v1/object/${noticeImageBucket}/${imagePath}`});
+}
+
+async function checkPaletteGroups(page){
+ const done=page.getByRole('button',{name:'Done',exact:true});
+ const openAppearance=async()=>{
+  await page.getByRole('button',{name:'Open Settings',exact:true}).click();
+  await page.getByRole('button',{name:/^Appearance /}).click();
+ };
+ const group=name=>page.getByRole('group',{name,exact:true});
+ const names=optionGroup=>optionGroup.locator('.palette-copy b').allTextContents();
+ const classic=group('Classic colours');
+ const seasonal=group('Seasonal colours');
+ const holiday=group('Holiday themes');
+ const paletteOption=(id,optionGroup)=>optionGroup.getByRole('button',{name:new RegExp(`^${festivePalettes[id]}\\b`)});
+ await openAppearance();
+ await classic.waitFor();
+ assert.deepEqual(await names(classic),['Blush & Gold','Sage & Linen','Coastal Blue','Lavender','Warm Sand','Classic Ivory']);
+ assert.deepEqual(await names(seasonal),['Spring Garden','Summer Shore','Autumn Harvest','Winter Pine']);
+ assert.deepEqual(await names(holiday),['Easter','Halloween','Thanksgiving','Christmas']);
+ assert.equal(await classic.getByRole('button',{name:/^Sage & Linen/}).getAttribute('aria-pressed'),'true');
+
+ const artwork=new Set();
+ const heroColours=new Set();
+ for(const [index,id] of Object.keys(festivePalettes).entries()){
+  if(index)await openAppearance();
+  const option=paletteOption(id,['spring','summer'].includes(id)?seasonal:holiday);
+  await option.click();
+  assert.equal(await option.getAttribute('aria-pressed'),'true');
+  await page.waitForFunction(palette=>document.documentElement.dataset.palette===palette,id);
+  await done.click();
+  const illustration=page.locator(`.seasonal-decor[data-season="${id}"]`);
+  await illustration.waitFor();
+  assert.equal(await illustration.getAttribute('aria-hidden'),'true');
+  assert.equal(await illustration.evaluate(node=>getComputedStyle(node).pointerEvents),'none');
+  artwork.add(await illustration.locator('svg').innerHTML());
+  const heroColour=await illustration.evaluate(node=>getComputedStyle(node.closest('.page-heading')).backgroundImage);
+  assert.notEqual(heroColour,'none',`Home has a visible themed hero for ${id}`);
+  heroColours.add(heroColour);
+ }
+ const count=Object.keys(festivePalettes).length;
+ assert.equal(artwork.size,count,'Each seasonal or holiday theme has its own illustration');
+ assert.equal(heroColours.size,count,'Each seasonal or holiday theme has its own hero colours');
+
+ await openAppearance();
+ await classic.getByRole('button',{name:/^Sage & Linen/}).click();
+ await done.click();
+ await page.waitForFunction(()=>document.documentElement.dataset.palette==='sage');
+ await page.locator('.page-heading .little-house').waitFor();
+ assert.equal(await page.locator('.seasonal-decor').count(),0);
+}
+
+async function checkAdminPaletteSchedule(page,paletteWrites){
+ await page.setViewportSize({width:320,height:780});
+ const nav=page.getByRole('navigation',{name:'Admin Dashboard'});
+ await nav.waitFor();
+ const active=nav.locator('button[aria-current="page"]');
+ assert.equal(await nav.getByRole('button').count(),5);
+ assert.equal(await active.innerText(),'Pilot access');
+ await nav.getByRole('button',{name:'Seasonal palettes',exact:true}).click();
+ const availability=page.getByRole('region',{name:'Theme availability'});
+ await availability.waitFor();
+ assert.equal(await active.innerText(),'Seasonal palettes');
+ assert.equal(await active.count(),1,'Only the current dashboard section is active');
+ await availability.getByRole('region',{name:'Seasonal colours'}).waitFor();
+ const holidays=availability.getByRole('region',{name:'Holiday themes'});
+ const christmas=holidays.locator('details[data-theme="christmas"]');
+ assert.equal(await christmas.locator('.theme-card-status').getAttribute('data-state'),'off');
+ await christmas.locator('summary').click();
+ const schedule=christmas.getByRole('form',{name:'Christmas schedule'});
+ await schedule.getByRole('checkbox',{name:'Enable theme',exact:true}).check();
+ const start='2090-12-20',stop='2090-12-27';
+ const startDate=schedule.getByLabel('Start date',{exact:true});
+ const stopDate=schedule.getByLabel('Stop date',{exact:true});
+ await startDate.fill(start);
+ await stopDate.fill('2090-12-19');
+ const save=schedule.getByRole('button',{name:'Save schedule',exact:true});
+ await save.click();
+ await page.getByRole('alert').filter({hasText:'Choose a stop date after the start date.'}).waitFor();
+ assert.equal(paletteWrites.length,0,'An invalid schedule stays local');
+
+ await stopDate.fill(stop);
+ const startBounds=await startDate.boundingBox();
+ const stopBounds=await stopDate.boundingBox();
+ assert.ok(startBounds&&stopBounds&&stopBounds.y>=startBounds.y+startBounds.height,'Phone date fields are stacked');
+ const viewport=await page.evaluate(()=>{
+  const width=document.documentElement.scrollWidth;
+  const overflow=width>innerWidth?[...document.querySelectorAll('body *')].filter(node=>{
+   const bounds=node.getBoundingClientRect();
+   return bounds.width>0&&bounds.right>innerWidth;
+  }).slice(0,12).map(node=>({tag:node.tagName,style:node.getAttribute('class'),right:node.getBoundingClientRect().right})):[];
+  return {width,viewport:innerWidth,overflow};
+ });
+ assert.ok(viewport.width<=viewport.viewport,`Dashboard and date controls fit a 320px phone: ${JSON.stringify(viewport)}`);
+ await save.click();
+ await page.getByRole('status').filter({hasText:'Christmas schedule saved.'}).waitFor();
+ assert.deepEqual(paletteWrites,[{action:'set_palette',payload:{palette:'christmas',enabled:true,starts_on:start,stops_on:stop}}]);
+ assert.equal(await christmas.locator('.theme-card-status').getAttribute('data-state'),'scheduled');
+ assert.deepEqual(await christmas.locator('.theme-card-period time').evaluateAll(nodes=>nodes.map(node=>node.dateTime)),[start,stop]);
+ if(process.env.HH_ADMIN_PALETTE_SAMPLE)await page.screenshot({path:process.env.HH_ADMIN_PALETTE_SAMPLE,fullPage:true,animations:'disabled'});
+}
+
+async function checkMemberNoticeHistory(page,historyRequests){
+ const popup=page.getByRole('dialog',{name:'App update',exact:true});
+ const title=`${noticeHistory[0].release_version} · ${noticeHistory[0].title}`;
+ await popup.getByRole('heading',{name:title,exact:true}).waitFor();
+ await popup.getByRole('button',{name:'Got it',exact:true}).click();
+ await popup.waitFor({state:'detached'});
+ assert.equal(historyRequests.length,0,'The history is loaded when requested');
+ const nav=page.getByRole('navigation',{name:'Main navigation'});
+ await nav.getByRole('button',{name:'More',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:/^Notices & updates/}).click();
+ const history=page.getByRole('dialog',{name:'Notices & updates',exact:true});
+ await history.getByText('App version on this device V2.1',{exact:true}).waitFor();
+ const dismissed=history.getByText(title,{exact:true});
+ await dismissed.click();
+ await history.getByText(noticeHistory[0].body,{exact:true}).waitFor();
+ const loadEarlier=history.getByRole('button',{name:'Load earlier posts',exact:true});
+ await loadEarlier.click();
+ await history.getByText(noticeHistory[1].title,{exact:true}).waitFor();
+ await loadEarlier.waitFor({state:'detached'});
+ assert.deepEqual(historyRequests,[
+  {before_published_at:null,before_id:null},
+  {before_published_at:noticeHistory[0].published_at,before_id:noticeHistory[0].id},
+ ]);
+ assert.equal(await dismissed.count(),1,
+  'Loading earlier pages preserves already-dismissed updates in history');
 }
 
 async function checkRatingPrompt(page,state,requests,queueNotice){
@@ -183,11 +390,15 @@ async function run(){
   browser=await launchBrowser();
   const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
   const adminUrl=new URL('admin.html',url).href;
-  for(const state of ['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','rating-submit','rating-dismiss']){
-   const approved=['authorized','authorized-visit','callback','signout'].includes(state);
+  const allScenarios=['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','member-palettes','member-images','member-notice-history','admin-notice-image','admin-palette-schedule','rating-submit','rating-dismiss'];
+  const scenarios=process.env.HH_ADMIN_MENU_SCENARIOS?.split(',').map(scenario=>scenario.trim())??allScenarios;
+  assert.ok(scenarios.every(scenario=>allScenarios.includes(scenario)),'Unknown admin menu browser scenario');
+  for(const state of scenarios){
+   const approved=['authorized','authorized-visit','callback','signout','admin-notice-image','admin-palette-schedule'].includes(state);
    const ratingMember=state==='rating-submit'||state==='rating-dismiss';
    const context=await browser.newContext({viewport:{width:390,height:844}});
-   await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
+   const localOrigin=new URL(url).origin;
+   await context.route('**/*',route=>new URL(route.request().url()).origin===localOrigin?route.continue():route.abort('blockedbyclient'));
    await context.routeWebSocket('**/*',socket=>socket.close());
    await context.addInitScript(redirectFixtureAPI);
    await context.addInitScript(({session,key,state})=>{
@@ -202,19 +413,39 @@ async function run(){
    },{session,key:basePaletteKey,state});
    const {promise:adminCheck,resolve:checked}=Promise.withResolvers();
    const {promise:waitToReply,resolve:reply}=Promise.withResolvers();
-   let activeSeasons=['spring','spring','unknown'];
-   let publishedNotices=state==='rating-submit'?notices.slice(0,1):state==='rating-dismiss'?[]:notices;
+   let activeSeasons=state==='member-palettes'?seasonalPaletteIds:['spring','spring','unknown'];
+   const initialNotices={'rating-submit':notices.slice(0,1),'rating-dismiss':[],'member-palettes':[],'member-images':imageNotices,
+    'member-notice-history':noticeHistory.slice(0,1)};
+   let publishedNotices=initialNotices[state]??notices;
    let ratingComplete=false;
    const ratingRequests=[];
    const ratingToggles=[];
    const feedbackFilters=[];
+   const noticeWrites=[];
+   const storageRequests=[];
+   const paletteWrites=[];
+   const historyRequests=[];
    let ratingPromptEnabled=false;
    const {promise:queuedRatingNotice,resolve:ratingNoticeRefreshed}=Promise.withResolvers();
    let accountChecks=0,roleChecks=0,dashboardChecks=0,tokenRequests=0;
    setFixtureHandler(async route=>{
     const req=route.request(),target=new URL(req.url()),name=target.pathname.split('/').pop();
     let data=[];
-    if(target.pathname.startsWith('/auth/')){
+    if(target.pathname.startsWith('/storage/v1/')){
+     const method=req.method();
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     storageRequests.push({method,path:target.pathname});
+     if(method==='GET'&&state==='member-images'){
+      if(target.pathname.endsWith(imageNotices[0].image_path))return route.fulfill({body:noticePng,headers:{'Content-Type':'image/png'}});
+      if(target.pathname.endsWith(imageNotices[1].image_path))return route.fulfill({status:404,json:{message:'Fixture image unavailable'}});
+     }
+     if(method==='POST'&&state==='admin-notice-image'){
+      assert.match(req.headers()['content-type'],/image\/png|multipart\/form-data/);
+      return route.fulfill({json:{Key:target.pathname.slice('/storage/v1/object/'.length)}});
+     }
+     assert.fail('Unexpected notice image request '+target.pathname);
+    }
+    else if(target.pathname.startsWith('/auth/')){
      if(name==='user')accountChecks++;
      if(name==='token')tokenRequests++;
      data=user;
@@ -228,10 +459,19 @@ async function run(){
     else if(name==='hh_member_content'){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      const includesRatingNotice=publishedNotices.includes(ratingNotice);
-     if(state==='member-content'||ratingMember)data={notices:publishedNotices,seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete};
+     if(state==='member-content'||state==='member-palettes'||state==='member-images'||state==='member-notice-history'||ratingMember){
+      data={notices:publishedNotices,seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete};
+     }
      await route.fulfill({json:data});
      if(includesRatingNotice)ratingNoticeRefreshed(true);
      return;
+    }
+    else if(name==='hh_member_notice_history'){
+     assert.equal(state,'member-notice-history');
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     const {before_id=null,before_published_at=null}=req.postDataJSON()??{};
+     historyRequests.push({before_published_at,before_id});
+     data=before_id?{notices:noticeHistory.slice(1),has_more:false}:{notices:noticeHistory.slice(0,1),has_more:true};
     }
     else if(name==='hh_member_rating'){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
@@ -256,7 +496,21 @@ async function run(){
      assert.equal(req.postDataJSON()?.action,'snapshot');
      data={requests:[{id:'request-fixture',name:'Fixture applicant',email:'request@example.invalid',received_at:'2026-11-26T17:00:00Z',status:'preview'}],invitations:[],capacity:{used:0,total:14}};
     }
-    else if(name==='hh_admin_content')data={notices:[],seasonal_palettes:[]};
+    else if(name==='hh_admin_content'){
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     const request=req.postDataJSON();
+     data={notices:[],seasonal_palettes:[],palette_schedule:[]};
+     if(request.action==='publish_notice'){
+      assert.equal(state,'admin-notice-image');
+      assert.equal(storageRequests.length,1,'The artwork must upload before publishing');
+      noticeWrites.push(request);
+      data.notices=[{...request.payload,published_at:'2026-11-29T17:00:00Z'}];
+     }else if(request.action==='set_palette'){
+      assert.equal(state,'admin-palette-schedule');
+      paletteWrites.push(request);
+     }else assert.equal(request.action,'snapshot');
+     data.palette_schedule=paletteWrites.map(entry=>entry.payload);
+    }
     else if(name==='hh_admin_ratings'){
      assert.ok(approved,'Only an authorized admin can load the ratings inbox');
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
@@ -295,6 +549,18 @@ async function run(){
      await checkMemberContent(page,seasons=>{activeSeasons=seasons},entries=>{publishedNotices=entries});
      continue;
     }
+    if(state==='member-palettes'){
+     await checkPaletteGroups(page);
+     continue;
+    }
+    if(state==='member-images'){
+     await checkMemberNoticeImages(page,storageRequests);
+     continue;
+    }
+    if(state==='member-notice-history'){
+     await checkMemberNoticeHistory(page,historyRequests);
+     continue;
+    }
     if(ratingMember){
      await checkRatingPrompt(page,state,ratingRequests,()=>{publishedNotices=[ratingNotice,...publishedNotices];return queuedRatingNotice});
      continue;
@@ -325,6 +591,8 @@ async function run(){
       assert.equal(await page.locator('input[type="password"]').count(),0);
       assert.equal(context.pages().length,1);
       if(state==='authorized-visit')assert.equal(await page.evaluate(()=>localStorage.getItem('hh-test:hh-test:home-together-auth')),null);
+      if(state==='admin-notice-image')await checkAdminNoticeImage(page,noticeWrites,storageRequests);
+      if(state==='admin-palette-schedule')await checkAdminPaletteSchedule(page,paletteWrites);
       if(state==='authorized'){
        await page.getByRole('button',{name:'App ratings',exact:true}).click();
        const ratingsSwitch=checked=>page.getByRole('switch',{name:'Show the rating pop-up',checked});
@@ -360,4 +628,4 @@ async function run(){
  }finally{if(browser)await browser.close();server.close()}
 }
 
-run().then(()=>console.log('Admin menu and member content checks passed: TEST sign-in reuse, direct-entry denial, late sign-out, notices, optional seasonal palettes and one-time ratings.')).catch(error=>{console.error(error);process.exitCode=1});
+run().then(()=>console.log('Admin menu checks passed: '+(process.env.HH_ADMIN_MENU_SCENARIOS||'TEST sign-in reuse, direct-entry denial, late sign-out, notices with optional images, seasonal palettes and one-time ratings.'))).catch(error=>{console.error(error);process.exitCode=1});
