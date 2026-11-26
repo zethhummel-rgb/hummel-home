@@ -1,24 +1,27 @@
-import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
+import {lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {testEnvironment} from '../config';
 import {
-  adminClient, createPilotInvitation, familyAppUrl, getAdminStatus, getDashboard,
-  pilotInvitationUrl, sendPilotInvitation, type DashboardSnapshot, type PilotInvitation,
+  createPilotInvitation, familyAppUrl, getAdminStatus, getDashboard,
+  pilotInvitationUrl, sendPilotInvitation, standaloneAdminClient,
+  type AdminClient, type DashboardSnapshot, type GetAdminClient, type PilotInvitation,
 } from './api';
 import ContentPanel from './ContentPanel';
 import './styles.css';
 
 const logo = new URL('./icons/hh-192.png', familyAppUrl).href;
+const SharedSession = lazy(() => import('./SharedSession'));
 type Gate = 'loading' | 'sign-in' | 'verify' | 'ready';
 type Factor = {id: string; type: 'totp' | 'phone'; qr?: string; secret?: string};
 type Receipt = {email: string; token: string; delivery: 'sending' | 'sent' | 'unconfirmed' | 'preview'};
 
-function HHAdmin() {
+function StandaloneAdmin() {
+  const adminClient = standaloneAdminClient();
   const [gate, setGate] = useState<Gate>('loading');
   const [notice, setNotice] = useState('');
 
   async function openSession() {
-    const status = await getAdminStatus();
+    const status = await getAdminStatus(adminClient);
     if (!status.is_admin) {
       await adminClient.auth.signOut({scope: 'local'});
       setGate('sign-in');
@@ -55,6 +58,19 @@ function HHAdmin() {
   }
 
   return <>
+    {gate === 'ready' && <AdminWorkspace getClient={async () => adminClient} signOut={signOut} />}
+    {gate === 'verify' && <VerifyAdmin client={adminClient} onVerified={openSession} signOut={signOut} />}
+    {gate === 'sign-in' && <SignIn client={adminClient} onSignedIn={openSession} notice={notice} clearNotice={() => setNotice('')} />}
+    {gate === 'loading' && <CheckingAccess />}
+  </>;
+}
+
+function CheckingAccess() {
+  return <main className="auth-card"><p role="status">Checking admin access…</p></main>;
+}
+
+function HHAdmin() {
+  return <>
     <header className="masthead">
       <div className="shell masthead-inner">
         <div className="brand"><img src={logo} alt="" width="35" height="35" /><span>HH Admin</span></div>
@@ -62,10 +78,9 @@ function HHAdmin() {
         <a className="home-link" href={familyAppUrl.href}>Open HH <span aria-hidden="true">↗</span></a>
       </div>
     </header>
-    {gate === 'ready' && <AdminWorkspace signOut={signOut} />}
-    {gate === 'verify' && <VerifyAdmin onVerified={openSession} signOut={signOut} />}
-    {gate === 'sign-in' && <SignIn onSignedIn={openSession} notice={notice} clearNotice={() => setNotice('')} />}
-    {gate === 'loading' && <main className="auth-card"><p role="status">Checking admin access…</p></main>}
+    {testEnvironment ? <Suspense fallback={<CheckingAccess />}>
+      <SharedSession>{({userId, getClient}) => <AdminWorkspace key={userId} getClient={getClient} />}</SharedSession>
+    </Suspense> : <StandaloneAdmin />}
   </>;
 }
 
@@ -73,7 +88,7 @@ function AuthCard({title, children}: {title: string; children: ReactNode}) {
   return <main className="auth-card"><h1>{title}</h1>{children}</main>;
 }
 
-function SignIn({onSignedIn, notice, clearNotice}: {onSignedIn: () => Promise<void>; notice: string; clearNotice: () => void}) {
+function SignIn({client, onSignedIn, notice, clearNotice}: {client: AdminClient; onSignedIn: () => Promise<void>; notice: string; clearNotice: () => void}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -83,7 +98,7 @@ function SignIn({onSignedIn, notice, clearNotice}: {onSignedIn: () => Promise<vo
     setBusy(true);
     const form = new FormData(event.currentTarget);
     try {
-      const {error} = await adminClient.auth.signInWithPassword({
+      const {error} = await client.auth.signInWithPassword({
         email: String(form.get('email')).trim().toLowerCase(),
         password: String(form.get('password')),
       });
@@ -106,7 +121,7 @@ function SignIn({onSignedIn, notice, clearNotice}: {onSignedIn: () => Promise<vo
   </AuthCard>;
 }
 
-function VerifyAdmin({onVerified, signOut}: {onVerified: () => Promise<void>; signOut: () => Promise<void>}) {
+function VerifyAdmin({client, onVerified, signOut}: {client: AdminClient; onVerified: () => Promise<void>; signOut: () => Promise<void>}) {
   const [factor, setFactor] = useState<Factor>();
   const [factorsLoaded, setFactorsLoaded] = useState(false);
   const [challengeId, setChallengeId] = useState('');
@@ -115,7 +130,7 @@ function VerifyAdmin({onVerified, signOut}: {onVerified: () => Promise<void>; si
 
   async function loadFactors() {
     setError('');
-    const {data, error} = await adminClient.auth.mfa.listFactors();
+    const {data, error} = await client.auth.mfa.listFactors();
     if (error) {
       setError('Your verification methods could not be loaded. Try again.');
       return;
@@ -131,7 +146,7 @@ function VerifyAdmin({onVerified, signOut}: {onVerified: () => Promise<void>; si
     setBusy(true);
     setError('');
     try {
-      const {data, error} = await adminClient.auth.mfa.enroll({factorType: 'totp', issuer: 'HH Admin'});
+      const {data, error} = await client.auth.mfa.enroll({factorType: 'totp', issuer: 'HH Admin'});
       if (error) throw error;
       setFactor({id: data.id, type: 'totp', qr: data.totp.qr_code, secret: data.totp.secret});
     } catch {
@@ -146,7 +161,7 @@ function VerifyAdmin({onVerified, signOut}: {onVerified: () => Promise<void>; si
     setError('');
     setBusy(true);
     try {
-      const {data, error} = await adminClient.auth.mfa.challenge({factorId: factor.id});
+      const {data, error} = await client.auth.mfa.challenge({factorId: factor.id});
       if (error) throw error;
       setChallengeId(data.id);
     } catch {
@@ -164,8 +179,8 @@ function VerifyAdmin({onVerified, signOut}: {onVerified: () => Promise<void>; si
     const code = String(new FormData(event.currentTarget).get('code')).trim();
     try {
       const result = factor.type === 'phone'
-        ? await adminClient.auth.mfa.verify({factorId: factor.id, challengeId, code})
-        : await adminClient.auth.mfa.challengeAndVerify({factorId: factor.id, code});
+        ? await client.auth.mfa.verify({factorId: factor.id, challengeId, code})
+        : await client.auth.mfa.challengeAndVerify({factorId: factor.id, code});
       if (result.error) throw Error('That code could not be verified. Try a fresh code.');
       await onVerified();
     } catch (error) {
@@ -223,14 +238,14 @@ const adminViews = [
 ] as const;
 type AdminView = typeof adminViews[number]['id'];
 
-function AdminWorkspace({signOut}: {signOut: () => Promise<void>}) {
+function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOut?: () => Promise<void>}) {
   const [view, setView] = useState<AdminView>('pilot');
   const [contentView, setContentView] = useState<'notices' | 'palettes'>();
   const [error, setError] = useState('');
   return <main className="shell dashboard">
     <div className="dashboard-heading">
       <h1>{adminViews.find((tab) => tab.id === view)?.label}</h1>
-      <button type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}>Sign out</button>
+      {signOut && <button type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}>Sign out</button>}
     </div>
     <nav className="admin-navigation" aria-label="Admin Dashboard">
       {adminViews.map((tab) => <button type="button" key={tab.id} aria-current={tab.id === view ? 'page' : undefined} onClick={() => {
@@ -239,12 +254,12 @@ function AdminWorkspace({signOut}: {signOut: () => Promise<void>}) {
       }}>{tab.label}</button>)}
     </nav>
     {error && <p className="message error" role="alert">{error}</p>}
-    <div hidden={view !== 'pilot'}><Dashboard /></div>
-    {contentView && <div hidden={view === 'pilot'}><ContentPanel view={contentView} /></div>}
+    <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
+    {contentView && <div hidden={view === 'pilot'}><ContentPanel view={contentView} getClient={getClient} /></div>}
   </main>;
 }
 
-function Dashboard() {
+function Dashboard({getClient}: {getClient: GetAdminClient}) {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot>();
   const [email, setEmail] = useState('');
   const [selection, setSelection] = useState<'requests' | 'invitations'>('requests');
@@ -261,7 +276,7 @@ function Dashboard() {
     setLoading(true);
     setLoadError('');
     try {
-      setSnapshot(await getDashboard());
+      setSnapshot(await getDashboard(await getClient()));
     } catch (error) {
       setSnapshot(undefined);
       setLoadError(error instanceof Error ? error.message : 'The dashboard could not be loaded.');
@@ -273,7 +288,7 @@ function Dashboard() {
   useEffect(() => {void refresh();}, []);
 
   async function deliver(email: string, token: string) {
-    const sent = await sendPilotInvitation(token).catch(() => false);
+    const sent = await getClient().then((client) => sendPilotInvitation(client, token)).catch(() => false);
     setReceipt({email, token, delivery: sent ? 'sent' : 'unconfirmed'});
     await refresh();
   }
@@ -285,7 +300,7 @@ function Dashboard() {
     setSendError('');
     setCopyMessage('');
     try {
-      const token = await createPilotInvitation(recipient);
+      const token = await createPilotInvitation(await getClient(), recipient);
       setEmail('');
       setReceipt({email: recipient, token, delivery: testEnvironment ? 'preview' : 'sending'});
       if (testEnvironment) await refresh();

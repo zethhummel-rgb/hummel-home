@@ -19,6 +19,13 @@ const notices=[
  {id:'update-fixture',kind:'update',title:'New calendar features',body:'See the weekly agenda on Home.',published_at:'2026-11-25T15:00:00Z'},
 ];
 
+async function checkAdminBlocked(page){
+ await page.getByRole('heading',{name:'Open HH to use Admin',exact:true}).waitFor();
+ assert.equal(await page.locator('input[type="password"]').count(),0);
+ assert.equal(await page.getByRole('heading',{name:'Pilot access',exact:true}).count(),0);
+ await page.getByRole('link',{name:/Back to HH/}).waitFor();
+}
+
 async function checkMemberContent(page,setSeasons){
  await page.getByRole('heading',{name:'Today & coming up',exact:true}).waitFor();
  const panel=page.getByRole('region',{name:'Notices and updates from HH'});
@@ -84,24 +91,35 @@ async function run(){
  try{
   browser=await launchBrowser();
   const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
-  for(const state of ['authorized','ordinary','unavailable','signout','member-content']){
+  const adminUrl=new URL('admin.html',url).href;
+  for(const state of ['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content']){
+   const approved=['authorized','authorized-visit','callback','signout'].includes(state);
    const context=await browser.newContext({viewport:{width:390,height:844}});
    await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort('blockedbyclient'));
    await context.routeWebSocket('**/*',socket=>socket.close());
    await context.addInitScript(redirectFixtureAPI);
-   await context.addInitScript(({session,key})=>{
+   await context.addInitScript(({session,key,state})=>{
     if(sessionStorage.getItem('admin-menu-fixture'))return;
-    localStorage.setItem('hh-test:hh-test:home-together-auth',JSON.stringify(session));
+    if(state==='authorized-visit'){
+     sessionStorage.setItem('hh-test:hh:login-choice:v1','visit');
+     sessionStorage.setItem('hh-test:hh:login-visit:v1','admin-menu-visit');
+     sessionStorage.setItem('hh-test:hh-test:hh:visit-auth:v1:admin-menu-visit',JSON.stringify(session));
+    }else if(state!=='signed-out')localStorage.setItem('hh-test:hh-test:home-together-auth',JSON.stringify(session));
     localStorage.setItem(key,'sage');
     sessionStorage.setItem('admin-menu-fixture','1');
-   },{session,key:basePaletteKey});
+   },{session,key:basePaletteKey,state});
    const {promise:adminCheck,resolve:checked}=Promise.withResolvers();
    const {promise:waitToReply,resolve:reply}=Promise.withResolvers();
    let activeSeasons=['spring','spring','unknown'];
+   let accountChecks=0,roleChecks=0,dashboardChecks=0,tokenRequests=0;
    setFixtureHandler(async route=>{
     const req=route.request(),target=new URL(req.url()),name=target.pathname.split('/').pop();
     let data=[];
-    if(target.pathname.startsWith('/auth/'))data=user;
+    if(target.pathname.startsWith('/auth/')){
+     if(name==='user')accountChecks++;
+     if(name==='token')tokenRequests++;
+     data=user;
+    }
     else if(target.pathname.includes('/functions/'))data={configured:false,connected:false,nativeReady:true};
     else if(name==='household_members')data=req.headers().accept?.includes('vnd.pgrst.object')?member:[member];
     else if(name==='households')data={id:home,name:'Fixture Home',owner_id:user.id};
@@ -113,18 +131,36 @@ async function run(){
      if(state==='member-content')data={notices,seasonal_palettes:activeSeasons};
     }
     else if(name==='hh_admin_status'){
+     roleChecks++;
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      if(state==='signout'){checked(true);await waitToReply}
      await route.fulfill(state==='unavailable'?{status:404,json:{message:'Missing RPC'}}:
-      {json:{is_admin:state==='authorized'||state==='signout',requires_mfa:state==='authorized'||state==='signout'}});
+      {json:{is_admin:approved,requires_mfa:false}});
      checked(true);
      return;
     }
+    else if(name==='hh_admin_dashboard'){
+     dashboardChecks++;
+     assert.ok(approved,'Ordinary and signed-out users must not request admin data');
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     assert.equal(req.postDataJSON()?.action,'snapshot');
+     data={requests:[{id:'request-fixture',name:'Fixture applicant',email:'request@example.invalid',received_at:'2026-11-26T17:00:00Z',status:'preview'}],invitations:[],capacity:{used:0,total:14}};
+    }
+    else if(name==='hh_admin_content')data={notices:[],seasonal_palettes:[]};
     await route.fulfill({json:data});
    });
    try{
     const page=await context.newPage();
     page.setDefaultTimeout(10000);
+    if(state==='signed-out'||state==='callback'){
+     const entries=state==='callback'?[`${adminUrl}?code=synthetic-callback`,`${adminUrl}#access_token=synthetic-callback&type=recovery`]:[adminUrl];
+     for(const entry of entries){await page.goto(entry);await checkAdminBlocked(page)}
+     assert.equal(accountChecks,0);
+     assert.equal(roleChecks,0);
+     assert.equal(dashboardChecks,0);
+     assert.equal(tokenRequests,0);
+     continue;
+    }
     await page.goto(url);
     if(state==='member-content'){
      await checkMemberContent(page,seasons=>{activeSeasons=seasons});
@@ -138,16 +174,37 @@ async function run(){
      await page.getByRole('heading',{name:'Welcome home.'}).waitFor();
      reply();
      assert.equal(await link.count(),0);
+     await page.goto(adminUrl);
+     await checkAdminBlocked(page);
+     assert.equal(dashboardChecks,0);
     }else{
-     if(state==='authorized'){
+     if(approved){
       await link.waitFor();
       assert.equal(await link.getAttribute('href'),'./admin.html');
-      assert.equal(await link.getAttribute('target'),'_blank');
-     }else assert.equal(await link.count(),0,state);
+      assert.equal(await link.getAttribute('target'),null,'TEST Admin keeps the current tab’s HH sign-in');
+      const priorAccountChecks=accountChecks;
+      await link.click();
+      await page.waitForURL(adminUrl);
+      await page.getByRole('heading',{name:'Pilot access',exact:true}).waitFor();
+      await page.getByText('Fixture applicant',{exact:true}).waitFor();
+      assert.ok(accountChecks>priorAccountChecks,'Dashboard verifies the shared user with Auth');
+      assert.ok(dashboardChecks>0);
+      assert.equal(await page.locator('input[type="password"]').count(),0);
+      assert.equal(context.pages().length,1);
+      if(state==='authorized-visit')assert.equal(await page.evaluate(()=>localStorage.getItem('hh-test:hh-test:home-together-auth')),null);
+     }else{
+      assert.equal(await link.count(),0,state);
+      await page.goto(adminUrl);
+      await checkAdminBlocked(page);
+      assert.equal(dashboardChecks,0);
+      await page.getByRole('link',{name:/Back to HH/}).click();
+      await page.getByRole('heading',{name:'Today & coming up',exact:true}).waitFor();
+     }
     }
+    assert.equal(tokenRequests,0);
    }finally{reply();await context.close()}
   }
  }finally{if(browser)await browser.close();server.close()}
 }
 
-run().then(()=>console.log('Admin menu and member content checks passed: access, late sign-out, notice details and dismissal, optional seasonal palette selection and fallback.')).catch(error=>{console.error(error);process.exitCode=1});
+run().then(()=>console.log('Admin menu and member content checks passed: TEST sign-in reuse, direct-entry denial, late sign-out, notices and optional seasonal palettes.')).catch(error=>{console.error(error);process.exitCode=1});

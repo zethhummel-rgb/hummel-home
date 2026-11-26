@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState, type FormEvent} from 'react';
 import {testEnvironment} from '../config';
-import {adminClient} from './api';
+import type {GetAdminClient} from './api';
 
 const seasons = ['spring', 'summer', 'autumn', 'winter'] as const;
 type Season = typeof seasons[number];
@@ -18,7 +18,8 @@ type Draft = {id: string; kind: NoticeKind; title: string; body: string};
 type Action = 'snapshot' | 'publish_notice' | 'archive_notice' | 'set_palette';
 const dates = new Intl.DateTimeFormat('en-CA', {dateStyle: 'medium', timeStyle: 'short'});
 
-async function requestContent(action: Action, payload: Record<string, unknown> = {}): Promise<Contents> {
+async function requestContent(getClient: GetAdminClient, action: Action, payload: Record<string, unknown> = {}): Promise<Contents> {
+  const adminClient = await getClient();
   const {data, error} = await adminClient.rpc('hh_admin_content', {action, payload});
   if (error || !Array.isArray(data?.notices) || !Array.isArray(data?.seasonal_palettes)) {
     throw Error('HH could not confirm that change. Refresh before trying again.');
@@ -26,7 +27,7 @@ async function requestContent(action: Action, payload: Record<string, unknown> =
   return data;
 }
 
-export default function ContentPanel({view}: {view: 'notices' | 'palettes'}) {
+export default function ContentPanel({view, getClient}: {view: 'notices' | 'palettes'; getClient: GetAdminClient}) {
   const [data, setData] = useState<Contents>();
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +44,7 @@ export default function ContentPanel({view}: {view: 'notices' | 'palettes'}) {
     setBusy(true);
     setError('');
     try {
-      setData(await requestContent('snapshot'));
+      setData(await requestContent(getClient, 'snapshot'));
     } catch {
       setError('HH could not load these settings. Try refreshing.');
     } finally {setBusy(false);}
@@ -57,7 +58,7 @@ export default function ContentPanel({view}: {view: 'notices' | 'palettes'}) {
     setError('');
     setFeedback('');
     try {
-      setData(await requestContent(action, payload));
+      setData(await requestContent(getClient, action, payload));
       setFeedback(success);
       return true;
     } catch (err) {

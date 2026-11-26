@@ -1,16 +1,22 @@
-import {createClient} from '@supabase/supabase-js';
+import {createClient, type SupabaseClient} from '@supabase/supabase-js';
 import {authNamespace, publicConfig} from '../config';
 
 const storageKey = `${authNamespace}hh-admin-console:v1`;
-export const adminClient = createClient(publicConfig.url, publicConfig.key, {
-  auth: {
-    storageKey,
-    storage: window.sessionStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-  },
-});
+let standaloneClient: SupabaseClient | undefined;
+export function standaloneAdminClient(): SupabaseClient {
+  return standaloneClient ??= createClient(publicConfig.url, publicConfig.key, {
+    auth: {
+      storageKey,
+      storage: window.sessionStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+export type AdminClient = SupabaseClient;
+export type GetAdminClient = () => Promise<AdminClient>;
 
 export type AdminStatus = {is_admin: boolean; requires_mfa: boolean};
 export type PilotInvitation = {
@@ -37,7 +43,7 @@ export type DashboardSnapshot = {
   capacity: {used: number; total: number};
 };
 
-export async function getAdminStatus(): Promise<AdminStatus> {
+export async function getAdminStatus(adminClient: AdminClient): Promise<AdminStatus> {
   const {data, error} = await adminClient.rpc('hh_admin_status');
   if (error || typeof data?.is_admin !== 'boolean' || typeof data.requires_mfa !== 'boolean') {
     throw Error('Admin access could not be checked. Try signing in again.');
@@ -45,7 +51,7 @@ export async function getAdminStatus(): Promise<AdminStatus> {
   return data;
 }
 
-export async function getDashboard(): Promise<DashboardSnapshot> {
+export async function getDashboard(adminClient: AdminClient): Promise<DashboardSnapshot> {
   const {data, error} = await adminClient.rpc('hh_admin_dashboard', {action: 'snapshot'});
   if (error || !Array.isArray(data?.requests) || !Array.isArray(data?.invitations) || !data.capacity) {
     throw Error('The dashboard could not be loaded. Refresh or sign in again.');
@@ -53,7 +59,7 @@ export async function getDashboard(): Promise<DashboardSnapshot> {
   return data;
 }
 
-export async function createPilotInvitation(email: string): Promise<string> {
+export async function createPilotInvitation(adminClient: AdminClient, email: string): Promise<string> {
   const {data, error} = await adminClient.rpc('hh_admin_dashboard', {action: 'create_invite', payload: {email}});
   if (typeof data?.token === 'string' && /^[0-9a-f]{64}$/.test(data.token)) return data.token;
   const message = error?.message.toLowerCase() ?? '';
@@ -62,7 +68,7 @@ export async function createPilotInvitation(email: string): Promise<string> {
   throw Error('The invitation could not be created. Refresh the list before trying again.');
 }
 
-export async function sendPilotInvitation(token: string): Promise<boolean> {
+export async function sendPilotInvitation(adminClient: AdminClient, token: string): Promise<boolean> {
   const {data: auth} = await adminClient.auth.getSession();
   if (!auth.session) return false;
   const invoke = (accessToken: string) => adminClient.functions.invoke('invitation-email', {
@@ -78,7 +84,7 @@ export async function sendPilotInvitation(token: string): Promise<boolean> {
   return !response.error && response.data?.sent === true;
 }
 
-export const familyAppUrl = new URL('./', window.location.href);
+export const familyAppUrl = new URL(window.location.pathname.endsWith('/') ? '../' : './', window.location.href);
 
 export function pilotInvitationUrl(token: string): string {
   const url = new URL(familyAppUrl);

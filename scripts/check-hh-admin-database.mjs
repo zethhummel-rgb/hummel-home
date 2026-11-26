@@ -33,7 +33,7 @@ try{
  for(const name of ['schema','calendar','member-colours','pilot','pilot-seven-spots','pilot-fourteen-spots','invitation-email']){
   await db.exec(read(`database/${name}.sql`));
  }
- for(const name of ['20261110151437_hh_one_email_invitations','20261112181000_hh_pilot_request_mail','20261126210000_hh_site_admin_dashboard','20261126213000_hh_admin_content']){
+ for(const name of ['20261110151437_hh_one_email_invitations','20261112181000_hh_pilot_request_mail','20261126210000_hh_site_admin_dashboard','20261126213000_hh_admin_content','20261126220000_hh_admin_auth_policy']){
   await db.exec(read(`supabase/migrations/${name}.sql`));
  }
  for(const [role,id] of Object.entries(roles))await db.query('insert into auth.users values($1,$2,now())',[id,email(role)]);
@@ -252,6 +252,35 @@ try{
  await as('admin','aal2');
  assert.equal((await status()).is_admin,false);
  await assert.rejects(dashboard('create_invite',{email:email('invitee')}),/Admin access required/);
+
+ // Release defaults require MFA. Only a separate project-owner action opts TEST out.
+ await as('secondAdmin');
+ assert.deepEqual(await status(),{is_admin:true,requires_mfa:true});
+ await assert.rejects(dashboard('snapshot'),/Verify your second factor/);
+ await assert.rejects(content('snapshot'),/Verify your second factor/);
+ await assert.rejects(db.exec('update private.hh_admin_auth_policy set require_mfa=false'),/permission denied/);
+ await assert.rejects(value('select private.hh_admin_needs_second_factor()'),/permission denied/);
+ await as('host');
+ const lastInvite=(await value("select public.pilot_invitations('list')")).find(row=>row.email==='fourteenth@hh-qa.invalid');
+ await value("select public.pilot_invitations('revoke',null,$1)",[lastInvite.id]);
+ await db.exec('reset role;update private.hh_admin_auth_policy set require_mfa=false where id=true;');
+ await as('secondAdmin');
+ assert.deepEqual(await status(),{is_admin:true,requires_mfa:false});
+ assert.equal((await dashboard('snapshot')).capacity.used,13);
+ assert.match((await dashboard('create_invite',{email:'test-mfa-policy@hh-qa.invalid'})).token,/^[a-f0-9]{64}$/);
+ assert.deepEqual((await content('set_palette',{palette:'summer',enabled:true})).seasonal_palettes,['spring','summer']);
+ for(const role of ['admin','owner','unapprovedAlias']){
+  await as(role);
+  assert.deepEqual(await status(),{is_admin:false,requires_mfa:false});
+  await assert.rejects(dashboard('snapshot'),/Admin access required/);
+  await assert.rejects(content('snapshot'),/Admin access required/);
+ }
+ await db.exec('reset role;delete from private.hh_admin_auth_policy;');
+ await as('secondAdmin');
+ assert.deepEqual(await status(),{is_admin:true,requires_mfa:true});
+ await assert.rejects(dashboard('snapshot'),/Verify your second factor/);
+ await assert.rejects(content('snapshot'),/Verify your second factor/);
+ console.log('HH admin policy checks passed: MFA required by default and on missing settings, explicit TEST opt-out, private setting, and exact identity authorization.');
  console.log('HH admin database checks passed: exact identity grants, existing host access and separate MFA, shared pilot seats and mail claims, old and new invitation redemption, atomic request capture, preview, deduplication and expiry.');
  console.log('HH content checks passed: confirmed household-reader scope, explicit admin publication, idempotent retries, archives, seasonal availability, and restricted database grants.');
 }finally{
