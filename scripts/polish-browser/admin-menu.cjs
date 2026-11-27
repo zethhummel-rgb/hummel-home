@@ -6,6 +6,8 @@ const path=require('node:path');
 const {setTimeout:delay}=require('node:timers/promises');
 const {launchBrowser}=require('./browser.cjs');
 const {setFixtureHandler,serveFixture,redirectFixtureAPI}=require('./fixture-api.cjs');
+const currentVersion=fs.readFileSync('src/releaseVersion.ts','utf8').match(/^export const appReleaseVersion = '(V[0-9]+\.[0-9])';$/m)?.[1];
+assert.ok(currentVersion,'The fixture needs the current app release version');
 
 const user={id:'22222222-2222-4222-8222-222222222228',email:'admin-menu@example.invalid',aud:'authenticated',role:'authenticated',email_confirmed_at:'2026-01-01',user_metadata:{},app_metadata:{provider:'email'}};
 const home='11111111-1111-4111-8111-111111111118';
@@ -41,6 +43,8 @@ const noticeHistory=[
 ];
 const festivePalettes={spring:'Spring Garden',summer:'Summer Shore',easter:'Easter',halloween:'Halloween',thanksgiving:'Thanksgiving',christmas:'Christmas'};
 const seasonalPaletteIds=['spring','summer','autumn','winter','easter','halloween','thanksgiving','christmas'];
+const releaseCandidate={id:'33333333-3333-4333-8333-333333333359',version:'V2.4',commit_sha:'a'.repeat(40),artifact_run_id:'1201',artifact_sha256:'b'.repeat(64),
+ status:'ready',title:'',body:'',image_path:null,image_alt:null,error:null,created_at:'2026-11-28T17:00:00Z',updated_at:'2026-11-28T17:00:00Z'};
 
 async function checkAdminBlocked(page){
  await page.getByRole('heading',{name:'Open HH to use Admin',exact:true}).waitFor();
@@ -166,7 +170,7 @@ async function checkAdminNoticeImage(page,noticeWrites,storageRequests){
  const titleInput=compose.getByRole('textbox',{name:/^Title/});
  const bodyInput=compose.getByRole('textbox',{name:/^What changed/});
  const versionInput=compose.getByRole('textbox',{name:'App version',exact:true});
- assert.equal(await versionInput.inputValue(),'V2.2');
+ assert.equal(await versionInput.inputValue(),currentVersion);
  assert.equal(await titleInput.evaluate(node=>node.required),true,'Text-only updates still require a title');
  assert.equal(await bodyInput.evaluate(node=>node.required),true,'Text-only updates still require a message');
  await previewButton.click();
@@ -175,7 +179,7 @@ async function checkAdminNoticeImage(page,noticeWrites,storageRequests){
  await bodyInput.fill('A fictional update without artwork.');
  await versionInput.fill('invalid');
  await previewButton.click();
- await page.getByRole('alert').filter({hasText:'Enter an app version such as V2.2.'}).waitFor();
+ await page.getByRole('alert').filter({hasText:`Enter an app version such as ${currentVersion}.`}).waitFor();
  assert.equal(await preview.count(),0);
  await versionInput.fill(' v2.3 ');
  await previewButton.click();
@@ -324,7 +328,7 @@ async function checkMemberNoticeHistory(page,historyRequests){
  await nav.getByRole('button',{name:'More',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:/^Notices & updates/}).click();
  const history=page.getByRole('dialog',{name:'Notices & updates',exact:true});
- await history.getByText('App version on this device V2.2',{exact:true}).waitFor();
+ await history.getByText(`App version on this device ${currentVersion}`,{exact:true}).waitFor();
  const dismissed=history.getByText(title,{exact:true});
  await dismissed.click();
  await history.getByRole('img',{name:alt,exact:true}).waitFor();
@@ -444,6 +448,98 @@ async function checkRatingPrompt(page,state,requests,queueNotice,moveRatingTime)
  assert.equal(requests.length,completedRequests);
 }
 
+async function checkAdminReleases(page,connected,draftWrites,dispatchWrites,storageRequests,setStatus){
+ const open=()=>page.getByRole('button',{name:'Releases',exact:true}).click();
+ const editor=page.getByRole('region',{name:'V2.4 for HH TEST',exact:true});
+ const records=page.getByRole('region',{name:'Builds for HH TEST',exact:true});
+ const button=name=>editor.getByRole('button',{name,exact:true});
+ const form=editor.getByRole('form',{name:'Announcement draft'});
+ const imageAlt='A gold and green preview of the next HH release.';
+ const savedAt='2026-11-28T18:00:00.123456Z';
+ const refresh=()=>records.getByRole('button',{name:'Refresh',exact:true}).click();
+ const status=expected=>editor.locator(`.release-status[data-status="${expected}"]`).waitFor();
+ await open();
+ await status('ready');
+ if(connected){
+  await form.locator('input[type="file"]').setInputFiles({name:'release-fixture.png',mimeType:'image/png',buffer:noticePng});
+  await form.getByRole('textbox',{name:'Image description (alt text)',exact:true}).fill(imageAlt);
+ }else{
+  await editor.getByText(/Release connection isn’t configured yet/).waitFor();
+  await form.getByRole('textbox',{name:'Title',exact:true}).fill('Calendar refresh');
+  await form.getByRole('textbox',{name:'Message',exact:true}).fill('The release preview works without a deployment connection.');
+ }
+ await button('Preview announcement').click();
+ if(connected)await editor.getByRole('img',{name:imageAlt}).waitFor();
+ else await editor.getByRole('heading',{name:'V2.4 · Calendar refresh',exact:true}).waitFor();
+ assert.deepEqual(storageRequests,[]);
+ assert.deepEqual(draftWrites,[]);
+ assert.deepEqual(dispatchWrites,[]);
+ await button('Save draft').click();
+ await editor.getByText('Draft saved.',{exact:true}).waitFor();
+ assert.deepEqual(draftWrites,[{release_id:releaseCandidate.id,
+  title:connected?'':'Calendar refresh',
+  body:connected?'':'The release preview works without a deployment connection.',
+  image_path:connected?`${releaseCandidate.id}/artwork.png`:null,
+  image_alt:connected?imageAlt:null,
+ }]);
+ assert.deepEqual(dispatchWrites,[]);
+ if(connected)assert.equal(storageRequests.filter(({method})=>method==='POST').length,1);
+
+ await page.reload();
+ await page.getByRole('heading',{name:'Pilot access',exact:true}).waitFor();
+ await open();
+ await status('ready');
+ if(!connected){
+  assert.equal(await form.getByRole('textbox',{name:'Title',exact:true}).inputValue(),'Calendar refresh');
+  await editor.getByText(/Release connection isn’t configured yet/).waitFor();
+  assert.equal(await button('Review release').count(),0);
+  assert.equal(await button('Release to HH TEST').count(),0);
+  assert.deepEqual(dispatchWrites,[]);
+  return;
+ }
+ assert.equal(await form.getByRole('textbox',{name:'Image description (alt text)',exact:true}).inputValue(),imageAlt);
+ await button('Preview announcement').click();
+ await editor.getByRole('img',{name:imageAlt}).waitFor();
+ assert.ok(storageRequests.some(({method})=>method==='GET'),'Reopening downloads the saved artwork from private storage');
+
+ const confirmation=editor.getByRole('region',{name:'Release V2.4 to HH TEST?',exact:true});
+ await button('Review release').click();
+ await confirmation.getByText(/test\.hhfamily\.ca/).waitFor();
+ await confirmation.getByText(releaseCandidate.commit_sha.slice(0,12),{exact:true}).waitFor();
+ await confirmation.getByRole('button',{name:'Back',exact:true}).click();
+ assert.deepEqual(dispatchWrites,[]);
+ await button('Review release').click();
+ setStatus('ready',null,'2026-11-28T18:00:01.123456Z');
+ await refresh();
+ await confirmation.waitFor({state:'detached'});
+ assert.deepEqual(dispatchWrites,[],'Refreshing a revised draft must invalidate its prior confirmation');
+ setStatus('ready',null,savedAt);
+ await refresh();
+ await button('Review release').click();
+ await confirmation.getByRole('button',{name:'Release to HH TEST',exact:true}).click();
+ await status('queued');
+ assert.deepEqual(dispatchWrites,[{action:'release',release_id:releaseCandidate.id,expected_updated_at:savedAt}]);
+ assert.equal(await editor.getByRole('link',{name:'Open GitHub run',exact:true}).getAttribute('href'),'https://github.com/example/hh/actions/runs/1202');
+
+ setStatus('deploying',null,new Date().toISOString());
+ await refresh();
+ await status('deploying');
+ assert.equal(await button('Review deployment retry').count(),0);
+ setStatus('verified','The announcement was not posted.');
+ await refresh();
+ await status('verified');
+ await editor.getByText('The announcement was not posted.',{exact:true}).waitFor();
+ await button('Review announcement retry').click();
+ await button('Retry announcement').click();
+ await editor.getByRole('alert').getByText(/HH could not confirm the request/).waitFor();
+ await status('verified');
+ await button('Review announcement retry').click();
+ await button('Retry announcement').click();
+ await status('published');
+ assert.deepEqual(dispatchWrites.slice(1),Array.from({length:2},()=>({action:'retry_announcement',release_id:releaseCandidate.id})));
+ assert.equal(await button('Review announcement retry').count(),0);
+}
+
 async function run(){
  const dist=path.resolve(process.env.HH_ADMIN_MENU_DIST||'dist');
  const server=http.createServer(async(req,res)=>{
@@ -460,11 +556,12 @@ async function run(){
   browser=await launchBrowser();
   const url='http://127.0.0.1:'+server.address().port+'/hummel-home/';
   const adminUrl=new URL('admin.html',url).href;
-  const allScenarios=['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','member-palettes','member-images','member-notice-history','admin-notice-image','admin-palette-schedule','rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'];
+  const allScenarios=['authorized','authorized-visit','signed-out','callback','ordinary','unavailable','signout','member-content','member-palettes','member-images','member-notice-history','admin-notice-image','admin-palette-schedule','admin-releases','admin-release-disconnected','rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'];
   const scenarios=process.env.HH_ADMIN_MENU_SCENARIOS?.split(',').map(scenario=>scenario.trim())??allScenarios;
   assert.ok(scenarios.every(scenario=>allScenarios.includes(scenario)),'Unknown admin menu browser scenario');
   for(const state of scenarios){
-   const approved=['authorized','authorized-visit','callback','signout','admin-notice-image','admin-palette-schedule'].includes(state);
+   const releaseScenario=['admin-releases','admin-release-disconnected'].includes(state);
+   const approved=releaseScenario||['authorized','authorized-visit','callback','signout','admin-notice-image','admin-palette-schedule'].includes(state);
    const ratingMember=['rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'].includes(state);
    const context=await browser.newContext({viewport:{width:390,height:844}});
    const localOrigin=new URL(url).origin;
@@ -497,6 +594,10 @@ async function run(){
    const storageRequests=[];
    const paletteWrites=[];
    const historyRequests=[];
+   const draftWrites=[];
+   const dispatchWrites=[];
+   let releaseRecord={...releaseCandidate};
+   let announcementRetries=0;
    let ratingPromptEnabled=false;
    const {promise:queuedRatingNotice,resolve:ratingNoticeRefreshed}=Promise.withResolvers();
    let accountChecks=0,roleChecks=0,dashboardChecks=0,tokenRequests=0;
@@ -514,7 +615,10 @@ async function run(){
      if(method==='GET'&&state==='member-notice-history'&&target.pathname.endsWith(noticeHistory[0].image_path)){
       return route.fulfill({body:noticePng,headers:{'Content-Type':'image/png'}});
      }
-     if(method==='POST'&&state==='admin-notice-image'){
+     if(method==='GET'&&releaseScenario&&target.pathname.endsWith(`${releaseCandidate.id}/artwork.png`)){
+      return route.fulfill({body:noticePng,headers:{'Content-Type':'image/png'}});
+     }
+     if(method==='POST'&&(state==='admin-notice-image'||releaseScenario)){
       assert.match(req.headers()['content-type'],/image\/png|multipart\/form-data/);
       return route.fulfill({json:{Key:target.pathname.slice('/storage/v1/object/'.length)}});
      }
@@ -524,6 +628,28 @@ async function run(){
      if(name==='user')accountChecks++;
      if(name==='token')tokenRequests++;
      data=user;
+    }
+    else if(target.pathname.includes('/functions/')&&name==='hh-release-dispatch'){
+     assert.ok(releaseScenario,'Only the Releases tab checks dispatch availability');
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     const request=req.postDataJSON();
+     if(request.action==='availability')data={dispatch_ready:state==='admin-releases',target:'TEST'};
+     else{
+      assert.equal(state,'admin-releases','A disconnected release cannot dispatch');
+      assert.equal(request.release_id,releaseRecord.id);
+      dispatchWrites.push(request);
+      if(request.action==='release'){
+       assert.equal(request.expected_updated_at,releaseRecord.updated_at);
+       releaseRecord={...releaseRecord,status:'queued'};
+       data={ok:true,run_url:'https://github.com/example/hh/actions/runs/1202'};
+      }else{
+       assert.equal(request.action,'retry_announcement');
+       assert.equal(releaseRecord.status,'verified');
+       if(++announcementRetries===1)return route.fulfill({status:502,json:{error:'Fixture announcement unavailable'}});
+       releaseRecord={...releaseRecord,status:'published',error:null};
+       data={ok:true};
+      }
+     }
     }
     else if(target.pathname.includes('/functions/'))data={configured:false,connected:false,nativeReady:true};
     else if(name==='household_members')data=req.headers().accept?.includes('vnd.pgrst.object')?member:[member];
@@ -577,6 +703,18 @@ async function run(){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      assert.equal(req.postDataJSON()?.action,'snapshot');
      data={requests:[{id:'request-fixture',name:'Fixture applicant',email:'request@example.invalid',received_at:'2026-11-26T17:00:00Z',status:'preview'}],invitations:[],capacity:{used:0,total:14}};
+    }
+    else if(name==='hh_admin_releases'){
+     assert.ok(releaseScenario,'Only the Releases tab loads candidate records');
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     const {action,payload}=req.postDataJSON();
+     if(action==='save_draft'){
+      const {release_id,...fields}=payload;
+      assert.equal(release_id,releaseRecord.id);
+      draftWrites.push(payload);
+      releaseRecord={...releaseRecord,...fields,updated_at:'2026-11-28T18:00:00.123456Z'};
+     }else assert.equal(action,'snapshot');
+     data={releases:[releaseRecord],can_release:true};
     }
     else if(name==='hh_admin_content'){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
@@ -679,6 +817,8 @@ async function run(){
       if(state==='authorized-visit')assert.equal(await page.evaluate(()=>localStorage.getItem('hh-test:hh-test:home-together-auth')),null);
       if(state==='admin-notice-image')await checkAdminNoticeImage(page,noticeWrites,storageRequests);
       if(state==='admin-palette-schedule')await checkAdminPaletteSchedule(page,paletteWrites);
+      if(releaseScenario)await checkAdminReleases(page,state==='admin-releases',draftWrites,dispatchWrites,storageRequests,
+       (status,error=null,updated_at=releaseRecord.updated_at)=>{releaseRecord={...releaseRecord,status,error,updated_at}});
       if(state==='authorized'){
        await page.getByRole('button',{name:'App ratings',exact:true}).click();
        const ratingsSwitch=checked=>page.getByRole('switch',{name:'Show the rating pop-up',checked});

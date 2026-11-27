@@ -62,7 +62,7 @@ form { display: grid; gap: .9rem; }
 .admin-sign-out { display: inline-flex; align-items: center; gap: .35rem; flex-shrink: 0; }
 .admin-navigation {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--admin-tab-columns, 5), minmax(0, 1fr));
   gap: .3rem;
   padding: .35rem;
   border: 1px solid var(--line);
@@ -70,6 +70,7 @@ form { display: grid; gap: .9rem; }
   background: var(--paper);
   box-shadow: 0 3px 9px #20382c0b;
 }
+.admin-navigation.has-release-tab { --admin-tab-columns: 6; }
 .admin-navigation button {
   display: flex;
   align-items: center;

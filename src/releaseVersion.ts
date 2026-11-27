@@ -1,4 +1,4 @@
-export const appReleaseVersion = 'V2.2';
+export const appReleaseVersion = 'V2.3';
 
 export function parseReleaseVersion(value: string): string | undefined {
   const version = value.trim().toUpperCase();

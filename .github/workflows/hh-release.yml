@@ -1,0 +1,179 @@
+name: HH TEST release
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Prepare a tested build or release the approved build
+        required: true
+        type: choice
+        options: [prepare, release]
+        default: prepare
+      release_id:
+        description: Approved TEST release ID (for release only)
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hh-test-release-${{ inputs.action }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'zethhummel-rgb/hummel-home' && github.ref == 'refs/heads/main' && inputs.action == 'prepare'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_APP_ENV: test
+      VITE_SUPABASE_URL: https://ybizqfghnplcxlmlhvyn.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_jbLSo5LPkS9k06Fx1txlBQ_3rWWkWh_
+    outputs:
+      id: ${{ steps.package.outputs.id }}
+      version: ${{ steps.package.outputs.version }}
+      artifact_sha256: ${{ steps.package.outputs.artifact_sha256 }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Test the pinned TEST commit
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          npm ci --ignore-scripts
+          npm run test:calendar
+          node --experimental-strip-types scripts/check-outlook-calendar.mjs
+          npm run test:database
+          node scripts/check-hh-admin-releases-database.mjs
+          node scripts/check-hh-release-dispatch.mjs
+          npm run test:invitations
+          node scripts/check-event-guests.mjs
+          npm run test:recovery
+          npm run test:welcome
+          npm run test:staging
+          npm run test:feedback
+          npm run test:polish
+          node scripts/check-offline-shopping.mjs
+          node scripts/check-portal-search.mjs
+      - name: Build for HH TEST
+        run: npm run build
+      - name: Test the built site and admin
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+          npx --no-install playwright install --with-deps chromium webkit
+          HH_BROWSER=chromium node scripts/polish-browser/public-homepage.cjs
+          HH_BROWSER=chromium node scripts/polish-browser/admin-menu.cjs
+          HH_BROWSER=webkit HH_ADMIN_MENU_SCENARIOS=member-content,member-images,admin-notice-image,member-notice-history,rating-submit,rating-dismiss,rating-no-comment,rating-unquoted,admin-releases,admin-release-disconnected node scripts/polish-browser/admin-menu.cjs
+      - name: Package the checked build
+        id: package
+        run: node scripts/hh-test-release.mjs prepare
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hh-test-release-${{ steps.package.outputs.id }}
+          path: ${{ runner.temp }}/hh-test-release.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  register:
+    if: github.repository == 'zethhummel-rgb/hummel-home' && github.ref == 'refs/heads/main' && inputs.action == 'prepare'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: hh-test-release-prepare
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Register the tested artifact
+        env:
+          HH_RELEASE_WORKER_KEY: ${{ secrets.HH_RELEASE_WORKER_KEY }}
+          HH_RELEASE_ID: ${{ needs.prepare.outputs.id }}
+          HH_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          HH_RELEASE_ARTIFACT_SHA256: ${{ needs.prepare.outputs.artifact_sha256 }}
+        run: node scripts/hh-test-release.mjs register
+
+  release:
+    if: github.repository == 'zethhummel-rgb/hummel-home' && github.ref == 'refs/heads/main' && inputs.action == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: hh-test-release-deploy
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Check TEST Pages configuration
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.HH_TEST_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HH_TEST_CLOUDFLARE_API_TOKEN }}
+        run: node scripts/hh-test-release.mjs check-pages
+      - name: Install the pinned deploy tool
+        run: |
+          npm install --prefix "$RUNNER_TEMP/hh-wrangler" --ignore-scripts --no-audit --no-fund wrangler@4.119.0
+          node "$RUNNER_TEMP/hh-wrangler/node_modules/wrangler/bin/wrangler.js" --version
+      - name: Claim the approved TEST release
+        id: claim
+        env:
+          HH_RELEASE_ID: ${{ inputs.release_id }}
+          HH_RELEASE_WORKER_KEY: ${{ secrets.HH_RELEASE_WORKER_KEY }}
+        run: node scripts/hh-test-release.mjs claim
+      - name: Check the approved build run
+        if: steps.claim.outputs.claimed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/hh-test-release.mjs check-run
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: steps.claim.outputs.claimed == 'true'
+        with:
+          github-token: ${{ github.token }}
+          repository: zethhummel-rgb/hummel-home
+          run-id: ${{ steps.claim.outputs.artifact_run_id }}
+          name: ${{ steps.claim.outputs.artifact_name }}
+          path: ${{ runner.temp }}/hh-release-download
+      - name: Verify and unpack only the approved archive
+        if: steps.claim.outputs.claimed == 'true'
+        run: node scripts/hh-test-release.mjs unpack
+      - name: Publish to the HH TEST Pages project
+        if: steps.claim.outputs.claimed == 'true'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.HH_TEST_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.HH_TEST_CLOUDFLARE_API_TOKEN }}
+          HH_RELEASE_COMMIT_SHA: ${{ steps.claim.outputs.commit_sha }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          node "$RUNNER_TEMP/hh-wrangler/node_modules/wrangler/bin/wrangler.js" pages deploy "$RUNNER_TEMP/hh-release-content" \
+            --project-name hh-family-domain-test --branch main --commit-hash "$HH_RELEASE_COMMIT_SHA"
+      - name: Verify the deployed TEST marker, scripts and noindex
+        if: steps.claim.outputs.claimed == 'true'
+        run: node scripts/hh-test-release.mjs verify-host
+      - name: Record the verified deployment
+        if: steps.claim.outputs.claimed == 'true'
+        id: record_verified
+        env:
+          HH_RELEASE_WORKER_KEY: ${{ secrets.HH_RELEASE_WORKER_KEY }}
+        run: node scripts/hh-test-release.mjs verified
+      - name: Publish the approved announcement
+        if: steps.claim.outputs.claimed == 'true'
+        env:
+          HH_RELEASE_WORKER_KEY: ${{ secrets.HH_RELEASE_WORKER_KEY }}
+        run: node scripts/hh-test-release.mjs publish
+      - name: Record a failed or unverified deployment
+        if: failure() && steps.claim.outputs.claimed == 'true' && steps.record_verified.outcome != 'success'
+        env:
+          HH_RELEASE_WORKER_KEY: ${{ secrets.HH_RELEASE_WORKER_KEY }}
+        run: node scripts/hh-test-release.mjs failed

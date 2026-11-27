@@ -1,6 +1,6 @@
 import {lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ArrowUpRight, Bell, LogOut, MessageSquare, Palette, Star, Ticket} from 'lucide-react';
+import {ArrowUpRight, Bell, LogOut, MessageSquare, PackageCheck, Palette, Star, Ticket} from 'lucide-react';
 import {testEnvironment} from '../config';
 import {appReleaseVersion} from '../releaseVersion';
 import {
@@ -14,6 +14,7 @@ import './styles.css';
 
 const logo = new URL('./icons/hh-192.png', familyAppUrl).href;
 const SharedSession = lazy(() => import('./SharedSession'));
+const ReleasePanel = lazy(() => import('./ReleasePanel'));
 type Gate = 'loading' | 'sign-in' | 'verify' | 'ready';
 type Factor = {id: string; type: 'totp' | 'phone'; qr?: string; secret?: string};
 type Receipt = {email: string; token: string; delivery: 'sending' | 'sent' | 'unconfirmed' | 'preview'};
@@ -244,14 +245,17 @@ const adminViews = [
   {id: 'palettes', label: 'Seasonal palettes', icon: Palette, description: 'Choose which seasonal and holiday themes members can use and when.'},
   {id: 'feedback', label: 'Feedback & ideas', icon: MessageSquare, description: 'Read feedback and ideas submitted by members.'},
   {id: 'ratings', label: 'App ratings', icon: Star, description: 'Manage the rating prompt and review responses.'},
+  {id: 'releases', label: 'Releases', icon: PackageCheck, description: 'Review approved builds and prepare their app update announcements.'},
 ] as const;
 type AdminView = typeof adminViews[number]['id'];
+const availableAdminViews = testEnvironment ? adminViews : adminViews.filter(tab => tab.id !== 'releases');
 
 function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOut?: () => Promise<void>}) {
   const [view, setView] = useState<AdminView>('pilot');
   const [contentView, setContentView] = useState<'notices' | 'palettes'>();
+  const [releaseOpened, setReleaseOpened] = useState(false);
   const [error, setError] = useState('');
-  const activeView = adminViews.find((tab) => tab.id === view) ?? adminViews[0];
+  const activeView = availableAdminViews.find((tab) => tab.id === view) ?? availableAdminViews[0];
   return <main className="shell dashboard">
     <header className="dashboard-header">
       <div className="dashboard-heading">
@@ -261,10 +265,11 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
         </div>
         {signOut && <button className="admin-sign-out" type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}><LogOut size={17} aria-hidden="true" /> Sign out</button>}
       </div>
-      <nav className="admin-navigation" aria-label="Admin Dashboard">
-        {adminViews.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-controls="admin-workspace-panel" aria-current={id === view ? 'page' : undefined} onClick={() => {
+      <nav className={testEnvironment ? "admin-navigation has-release-tab" : "admin-navigation"} aria-label="Admin Dashboard">
+        {availableAdminViews.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-controls="admin-workspace-panel" aria-current={id === view ? 'page' : undefined} onClick={() => {
           setView(id);
           if (id === 'notices' || id === 'palettes') setContentView(id);
+          if (id === 'releases') setReleaseOpened(true);
         }}><Icon size={17} aria-hidden="true" /><span>{label}</span></button>)}
       </nav>
     </header>
@@ -273,6 +278,9 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
       <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
       {contentView && <div hidden={view !== 'notices' && view !== 'palettes'}><ContentPanel view={contentView} getClient={getClient} /></div>}
       {(view === 'feedback' || view === 'ratings') && <Inbox key={view} view={view} getClient={getClient} />}
+      {releaseOpened && <div hidden={view !== 'releases'}><Suspense fallback={<p role="status">Loading releases…</p>}>
+        <ReleasePanel active={view === 'releases'} getClient={getClient} />
+      </Suspense></div>}
     </section>
   </main>;
 }
