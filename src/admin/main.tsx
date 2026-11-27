@@ -1,6 +1,6 @@
 import {lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ArrowUpRight, Bell, LogOut, MessageSquare, PackageCheck, Palette, Star, Ticket} from 'lucide-react';
+import {ArrowUpRight, Bell, LogOut, MessageSquare, PackageCheck, Palette, Star, Ticket, Users} from 'lucide-react';
 import {testEnvironment} from '../config';
 import {appReleaseVersion} from '../releaseVersion';
 import {
@@ -15,6 +15,7 @@ import './styles.css';
 const logo = new URL('./icons/hh-192.png', familyAppUrl).href;
 const SharedSession = lazy(() => import('./SharedSession'));
 const ReleasePanel = lazy(() => import('./ReleasePanel'));
+const AdminHouseholds = lazy(() => import('../AdminHouseholds'));
 type Gate = 'loading' | 'sign-in' | 'verify' | 'ready';
 type Factor = {id: string; type: 'totp' | 'phone'; qr?: string; secret?: string};
 type Receipt = {email: string; token: string; delivery: 'sending' | 'sent' | 'unconfirmed' | 'preview'};
@@ -241,6 +242,7 @@ const emailStatus: Record<string, string> = {sent: 'Email submitted', sending: '
 
 const adminViews = [
   {id: 'pilot', label: 'Pilot access', icon: Ticket, description: 'Review requests to join HH and track household invitations.'},
+  {id: 'households', label: 'Manage households', icon: Users, description: 'Review pilot households and see when they last used HH.'},
   {id: 'notices', label: 'Notices & updates', icon: Bell, description: 'Preview and publish pop-ups that members see when they open HH.'},
   {id: 'palettes', label: 'Seasonal palettes', icon: Palette, description: 'Choose which seasonal and holiday themes members can use and when.'},
   {id: 'feedback', label: 'Feedback & ideas', icon: MessageSquare, description: 'Read feedback and ideas submitted by members.'},
@@ -265,7 +267,7 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
         </div>
         {signOut && <button className="admin-sign-out" type="button" onClick={() => void signOut().catch((error: Error) => setError(error.message))}><LogOut size={17} aria-hidden="true" /> Sign out</button>}
       </div>
-      <nav className={testEnvironment ? "admin-navigation has-release-tab" : "admin-navigation"} aria-label="Admin Dashboard">
+      <nav className="admin-navigation" aria-label="Admin Dashboard">
         {availableAdminViews.map(({id, label, icon: Icon}) => <button type="button" key={id} aria-controls="admin-workspace-panel" aria-current={id === view ? 'page' : undefined} onClick={() => {
           setView(id);
           if (id === 'notices' || id === 'palettes') setContentView(id);
@@ -276,6 +278,9 @@ function AdminWorkspace({getClient, signOut}: {getClient: GetAdminClient; signOu
     {error && <p className="message error" role="alert">{error}</p>}
     <section id="admin-workspace-panel" aria-labelledby="admin-workspace-heading">
       <div hidden={view !== 'pilot'}><Dashboard getClient={getClient} /></div>
+      {view === 'households' && <Suspense fallback={<p role="status">Loading households…</p>}>
+        <AdminHouseholds getClient={getClient} />
+      </Suspense>}
       {contentView && <div hidden={view !== 'notices' && view !== 'palettes'}><ContentPanel view={contentView} getClient={getClient} /></div>}
       {(view === 'feedback' || view === 'ratings') && <Inbox key={view} view={view} getClient={getClient} />}
       {releaseOpened && <div hidden={view !== 'releases'}><Suspense fallback={<p role="status">Loading releases…</p>}>

@@ -619,6 +619,18 @@ try{
  const ownerVersion=(await memberContent()).notices.find(row=>row.id===versionedUpdate.id);
  assert.equal(ownerVersion.release_version,'V3.0');
  assert.equal('archived_at' in ownerVersion,false);
+ await db.exec('reset role');
+ await db.exec(read('supabase/migrations/20261127174649_hh_member_notice_acknowledgements.sql'));
+ const acknowledge=ids=>value('select public.hh_member_acknowledge_notices($1::uuid[])',[ids]);
+ await as('owner');
+ assert.deepEqual((await memberContent()).acknowledged_notice_ids,[]);
+ await acknowledge([versionedUpdate.id,versionedUpdate.id]);
+ await acknowledge([versionedUpdate.id]);
+ await assert.rejects(db.query('select * from private.hh_member_notice_acknowledgements'),/permission denied/);
+ await as('invitee');
+ assert.deepEqual((await memberContent()).acknowledged_notice_ids,[],'An acknowledgement cannot dismiss a notice for another member');
+ await as('owner');
+ assert.deepEqual((await memberContent()).acknowledged_notice_ids,[versionedUpdate.id],'Acknowledgements survive a fresh authenticated request');
  const historyFirstPage=await noticeHistory();
  assert.equal(historyFirstPage.has_more,true);
  assert.equal(historyFirstPage.notices.length,20);
@@ -640,12 +652,36 @@ try{
  await db.query('update auth.users set email_confirmed_at=null where id=$1',[roles.invitee]);
  await as('invitee');
  await assert.rejects(noticeHistory(),/Confirmed household membership required/);
+ await assert.rejects(acknowledge([versionedUpdate.id]),/Confirmed household membership required/);
  await db.exec('reset role;set role anon;');
  await assert.rejects(noticeHistory(),/permission denied/);
+ await assert.rejects(acknowledge([versionedUpdate.id]),/permission denied/);
  console.log('HH notice history and versions passed: legacy rows, normalized releases, idempotency, image updates, confirmed member access, archive exclusion, and stable pagination.');
  console.log('HH admin policy checks passed: MFA required by default and on missing settings, explicit TEST opt-out, private setting, and exact identity authorization.');
  console.log('HH admin database checks passed: exact identity grants, existing host access and separate MFA, shared pilot seats and mail claims, old and new invitation redemption, atomic request capture, preview, deduplication and expiry.');
  console.log('HH content checks passed: confirmed household-reader scope, explicit admin publication, idempotent retries, archives, seasonal availability, and restricted database grants.');
+
+ await db.exec(`reset role;
+  update private.hh_admin_auth_policy set require_mfa=true;
+  alter table auth.users add column last_sign_in_at timestamptz;
+  create table public.household_activity(household_id uuid,created_at timestamptz);`);
+ for(const name of ['20261022190515_hh_admin_accounts','20261115195411_hh_household_last_used','20261115201327_hh_admin_household_usage','20261127112511_hh_household_management_admin']){
+  await db.exec(read(`supabase/migrations/${name}.sql`));
+ }
+ const manage=()=>value("select public.admin_households('list',$1)",[{actorId:roles.admin}]);
+ const householdUsage=()=>db.query('select * from public.admin_household_usage()');
+ await as('owner','aal2');
+ await assert.rejects(manage(),/Admin access required/);
+ await assert.rejects(householdUsage(),/Admin access required/);
+ await as('secondAdmin');
+ await assert.rejects(manage(),/Admin access required/);
+ await assert.rejects(householdUsage(),/Admin access required/);
+ await as('secondAdmin','aal2');
+ assert.equal((await manage()).find(entry=>entry.id===hostHome)?.protected,true);
+ assert.ok((await householdUsage()).rows.some(entry=>entry.household_id===hostHome));
+ await asService();
+ await assert.rejects(manage(),/permission denied/);
+ console.log('Household management follows the dashboard role and authenticator policy, and still protects the pilot host household.');
 }finally{
  await db.close();
 }

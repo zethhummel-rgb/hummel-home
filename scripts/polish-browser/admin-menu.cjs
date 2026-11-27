@@ -111,7 +111,7 @@ async function checkMemberContent(page,setSeasons,setNotices){
  await openAppearance();
  await spring.waitFor();
  await palette('ivory');
- const queued={id:'queued-notice-fixture',kind:'notice',title:'A new notice',body:'This notice arrived while Settings was open.',published_at:'2026-11-27T17:00:00Z'};
+ const queued={id:'33333333-3333-4333-8333-333333333353',kind:'notice',title:'A new notice',body:'This notice arrived while Settings was open.',published_at:'2026-11-27T17:00:00Z'};
  setNotices([queued,...notices]);
  setSeasons(['spring','winter']);
  await refresh();
@@ -119,9 +119,23 @@ async function checkMemberContent(page,setSeasons,setNotices){
  assert.equal(await notice.count()+await update.count(),0,'New notices wait while Settings is open');
  await page.getByRole('button',{name:'Done',exact:true}).click();
  await notice.getByText(queued.title,{exact:true}).waitFor();
+ const saved=page.waitForResponse(response=>response.url().includes('/rpc/hh_member_acknowledge_notices')&&
+  response.request().postDataJSON().p_notice_ids.includes(queued.id)&&response.ok());
  await notice.getByRole('button',{name:'Got it',exact:true}).click();
+ await saved;
  await today.waitFor();
- assert.equal(await notice.count()+await update.count(),0,'Acknowledged posts stay closed on reload');
+ await page.getByRole('button',{name:'Open Settings',exact:true}).click();
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();
+ await page.getByRole('heading',{name:'Welcome home.',exact:true}).waitFor();
+ await page.evaluate(userId=>localStorage.removeItem('hh-test:hh:member-notice-dismissals:'+userId),user.id);
+ await page.getByLabel('Email address',{exact:true}).fill(user.email);
+ await page.getByLabel('Password',{exact:true}).fill('Fixture-password-123');
+ const freshContent=page.waitForResponse(response=>response.url().includes('/rpc/hh_member_content')&&response.ok());
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ const returned=await (await freshContent).json();
+ assert.ok(returned.acknowledged_notice_ids.includes(queued.id));
+ await today.waitFor();
+ assert.equal(await notice.count()+await update.count(),0,'Server acknowledgements stay closed after signing out and back in without a browser cache');
 }
 
 async function checkMemberNoticeImages(page,storageRequests){
@@ -272,7 +286,7 @@ async function checkAdminPaletteSchedule(page,paletteWrites){
  await nav.waitFor();
  const active=nav.locator('button[aria-current="page"]');
  assert.deepEqual(await nav.getByRole('button').allTextContents(),[
-  'Pilot access','Notices & updates','Seasonal palettes','Feedback & ideas','App ratings','Releases',
+  'Pilot access','Manage households','Notices & updates','Seasonal palettes','Feedback & ideas','App ratings','Releases',
  ]);
  assert.equal(await active.innerText(),'Pilot access');
  await nav.getByRole('button',{name:'Seasonal palettes',exact:true}).click();
@@ -583,7 +597,7 @@ async function run(){
    const ratingMember=['rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'].includes(state);
    const context=await browser.newContext({
     viewport:{width:390,height:844},
-    ...(state==='signout'?{serviceWorkers:'block'}:{}),
+    ...(['signout','member-content'].includes(state)?{serviceWorkers:'block'}:{}),
    });
    const localOrigin=new URL(url).origin;
    await context.route('**/*',route=>new URL(route.request().url()).origin===localOrigin?route.continue():route.abort('blockedbyclient'));
@@ -605,6 +619,7 @@ async function run(){
    const initialNotices={'rating-submit':notices.slice(0,1),'rating-dismiss':[],'rating-no-comment':[],'rating-unquoted':[],'member-palettes':[],'member-images':imageNotices,
     'member-notice-history':noticeHistory.slice(0,1)};
    let publishedNotices=initialNotices[state]??notices;
+   const acknowledgedNotices=new Set();
    let ratingComplete=false;
    let ratingTime=Date.now();
    let snoozedUntil=0;
@@ -648,8 +663,8 @@ async function run(){
     else if(target.pathname.startsWith('/auth/')){
      if(name==='user')accountChecks++;
      if(name==='token')tokenRequests++;
-     if(name==='logout'&&state==='signout')return route.fulfill({status:204});
-     data=user;
+     if(name==='logout'&&['signout','member-content'].includes(state))return route.fulfill({status:204});
+     data=name==='token'&&state==='member-content'?session:user;
     }
     else if(target.pathname.includes('/functions/')&&name==='hh-release-dispatch'){
      assert.ok(releaseScenario,'Only the Releases tab checks dispatch availability');
@@ -683,11 +698,16 @@ async function run(){
      assert.equal(req.headers().authorization,'Bearer '+session.access_token);
      const includesRatingNotice=publishedNotices.includes(ratingNotice);
      if(state==='member-content'||state==='member-palettes'||state==='member-images'||state==='member-notice-history'||ratingMember){
-      data={notices:publishedNotices,seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete&&ratingTime>=snoozedUntil};
+      data={notices:publishedNotices,acknowledged_notice_ids:[...acknowledgedNotices],seasonal_palettes:activeSeasons,rating_eligible:ratingMember&&!ratingComplete&&ratingTime>=snoozedUntil};
      }
      await route.fulfill({json:data});
      if(includesRatingNotice)ratingNoticeRefreshed(true);
      return;
+    }
+    else if(name==='hh_member_acknowledge_notices'){
+     assert.equal(req.headers().authorization,'Bearer '+session.access_token);
+     for(const id of req.postDataJSON().p_notice_ids)acknowledgedNotices.add(id);
+     return route.fulfill({status:204});
     }
     else if(name==='hh_member_notice_history'){
      assert.equal(state,'member-notice-history');
