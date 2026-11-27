@@ -327,9 +327,20 @@ async function checkMemberNoticeHistory(page,historyRequests){
  await popup.getByRole('button',{name:'Got it',exact:true}).click();
  await popup.waitFor({state:'detached'});
  assert.equal(historyRequests.length,0,'The history is loaded when requested');
+ await page.setViewportSize({width:320,height:650});
  const nav=page.getByRole('navigation',{name:'Main navigation'});
  await nav.getByRole('button',{name:'More',exact:true}).click();
- await page.getByRole('dialog').getByRole('button',{name:/^Notices & updates/}).click();
+ const more=page.getByRole('dialog',{name:'More for your home'});
+ assert.equal(await more.getByRole('button',{name:/^Notices & updates/}).count(),0);
+ await more.getByRole('button',{name:'Close More menu'}).click();
+ await page.getByRole('button',{name:'Open Settings',exact:true}).click();
+ const settings=page.getByRole('dialog',{name:'Settings',exact:true});
+ assert.equal(await settings.getByRole('button',{name:/^Notices & updates/}).count(),0);
+ await settings.getByRole('button',{name:'Done',exact:true}).first().click();
+ const footer=page.getByRole('navigation',{name:'HH information',exact:true});
+ assert.deepEqual(await footer.getByRole('link').allTextContents(),['About HH','Privacy','Terms']);
+ const openHistory=footer.getByRole('button',{name:'Notices & updates',exact:true});
+ await openHistory.click();
  const history=page.getByRole('dialog',{name:'Notices & updates',exact:true});
  await history.getByText(`App version on this device ${currentVersion}`,{exact:true}).waitFor();
  const dismissed=history.getByText(title,{exact:true});
@@ -346,6 +357,10 @@ async function checkMemberNoticeHistory(page,historyRequests){
  ]);
  assert.equal(await dismissed.count(),1,
   'Loading earlier pages preserves already-dismissed updates in history');
+ assert.equal(await history.getByRole('button',{name:'Back to Settings',exact:true}).count(),0);
+ await page.keyboard.press('Escape');
+ await history.waitFor({state:'detached'});
+ await openHistory.evaluate(button=>{if(document.activeElement!==button)throw Error('Focus did not return to the footer')});
 }
 
 async function checkRatingClosedAfterReload(page,rating,message){
