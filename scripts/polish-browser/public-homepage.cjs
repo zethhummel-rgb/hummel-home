@@ -153,8 +153,11 @@ async function run() {
         await page.getByLabel('Where did you hear about us?').fill('A friend');
         await page.getByLabel('Would you like to be part of the HH pilot?').selectOption('maybe');
         await sendRequest.click();
-        await page.getByRole('status').getByText('TEST preview complete. Use the email link below to contact HH directly.').waitFor();
-        assert.equal(await page.getByLabel('Email address', {exact: true}).inputValue(), 'jamie@example.invalid');
+        await page.getByRole('status').getByText('Your request was saved in HH TEST. No email was sent.').waitFor();
+        assert.equal(submissions.length, 3, 'The TEST request is submitted once');
+        assert.equal(submissions[2].email, 'jamie@example.invalid');
+        assert.notEqual(submissions[2].requestId, submissions[1].requestId);
+        assert.equal(await page.getByLabel('Email address', {exact: true}).inputValue(), '');
       }
       await page.getByRole('link', {name: 'Back to HH Family'}).click();
       await page.waitForURL(app + 'home.html');

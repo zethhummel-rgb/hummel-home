@@ -35,3 +35,7 @@ verify_jwt = false
 # Public form. The function validates fields, limits delivery and uses a fixed inbox.
 [functions.request-pilot-invitation]
 verify_jwt = false
+
+# HH TEST only. Validates an HH admin session or the scoped release worker key.
+[functions.hh-release-dispatch]
+verify_jwt = false

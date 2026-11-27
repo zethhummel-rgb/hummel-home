@@ -19,6 +19,18 @@ Hummel Home is the staging site for HH Family. Initial source baseline:
 
 Do not use a moving branch tip as proof of which version was tested. Compare the staged source with the current HH source; resolve intervening changes and retest before release. No automatic staging-to-production merge is configured.
 
+Set the next app release number in `src/releaseVersion.ts` before building a release. Start with `V2.1`, increment through `V2.9`, then use `V3.0`. Verify the deployed number in HH Admin and on **More → Notices & updates**. Use the same number when publishing its release notes in HH Admin.
+
+### Admin release queue
+
+The **HH TEST release** GitHub workflow can prepare a build from the TEST repository's `main` branch. **Prepare** tests the exact commit and registers its archive checksum in **Admin → Releases**. Preparation does not update the website or create a member announcement. Prepare again from a new checked commit when a candidate's 30-day artifact expires.
+
+In HH TEST Admin, select the prepared version, save and preview its announcement, and confirm the **Release to HH TEST** action. The workflow deploys the checked archive, verifies the version and linked app files at the TEST address, and publishes the saved announcement. Failed verification preserves the draft. If deployment was verified and posting failed, **Retry announcement** checks that the approved build is still served and retries the post. A panel left in **Deploying** for an hour can be requeued after the previous run's 20-minute limit.
+
+The release switch is off until the TEST operator and deployment connection are configured. Restrict the GitHub environments `hh-test-release-prepare` and `hh-test-release-deploy` to `main`. Store the same dedicated random `HH_RELEASE_WORKER_KEY` in both environments and the TEST Edge Function. Keep `HH_TEST_CLOUDFLARE_API_TOKEN` and the `HH_TEST_CLOUDFLARE_ACCOUNT_ID` variable in the deploy environment. Cloudflare Pages write permission is account-scoped. The workflow checks the TEST repository, Cloudflare project and hosted address.
+
+In the TEST Edge Function, set `HH_RELEASE_OPERATOR_ID` to the authorized HH Admin user ID and `HH_RELEASE_GITHUB_TOKEN` to a credential with Actions write permission on the TEST repository. Set `HH_RELEASE_DISPATCH_ENABLED` to `true` when both environments are ready. Keep the TEST service-role key inside Supabase. None of these values belong in browser code, source control or chat.
+
 ## Isolation
 
 - Test builds reject the live backend and the live website path. Production builds reject the test project and test path.

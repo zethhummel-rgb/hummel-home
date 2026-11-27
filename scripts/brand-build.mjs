@@ -5,15 +5,16 @@ if(process.env.VITE_APP_ENV==='test'){
  fs.writeFileSync(path,JSON.stringify(manifest,null,2));
  const index='dist/index.html';fs.writeFileSync(index,fs.readFileSync(index,'utf8').replace(/<title>.*?<\/title>/,'<title>HH Test — Humble Home App</title>'));
  fs.copyFileSync('test-support/about.html','dist/about.html');
+ fs.copyFileSync('test-support/_headers','dist/_headers');
 }else{
  // Test-only instructions and fixtures must never appear in a production build.
  fs.rmSync('dist/test-guide.html',{force:true});
- for(const page of ['home.html','request-invitation.html'])fs.rmSync('dist/'+page,{force:true});
+ for(const page of ['home.html','request-invitation.html','about-hh.html'])fs.rmSync('dist/'+page,{force:true});
  fs.rmSync('dist/homepage',{force:true,recursive:true});
 }
 
-const assets=fs.readdirSync('dist/assets').filter(file=>/\.(js|css)$/.test(file)).sort().map(file=>'assets/'+file);
-const files=['index.html','icon.svg','favicon.svg','manifest.webmanifest','icons/hh-180.png','icons/hh-192.png','icons/hh-512.png',...assets];
+const assets=fs.readdirSync('dist/assets').filter(file=>/\.(js|css)$/.test(file)&&!/^(admin|SharedSession)-/.test(file)).sort().map(file=>'assets/'+file);
+const files=['index.html','icon.svg','favicon.svg','manifest.webmanifest','icons/hh-180.png','icons/hh-192.png','icons/hh-512.png','icons/hh-apple-touch-v2.png',...assets];
 const {createHash}=await import('node:crypto');
 const hash=createHash('sha256');
 for(const file of files)hash.update(fs.readFileSync('dist/'+file));

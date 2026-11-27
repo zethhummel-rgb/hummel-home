@@ -6,7 +6,7 @@ if(typeof location!=='undefined'){
  const url=new URL(location.href),fragment=new URLSearchParams(url.hash.slice(1));
  if(fragment.has('personal_calendar_state')||fragment.has('personal_calendar_code')){
   const state=fragment.get('personal_calendar_state')||'',code=fragment.get('personal_calendar_code')||'';
-  if(/^hhp_[A-Za-z0-9_-]{43}$/.test(state)&&code.length>0&&code.length<=4096)pending={state,code};
+  if(/^hhp_(?:test_)?[A-Za-z0-9_-]{43}$/.test(state)&&code.length>0&&code.length<=4096)pending={state,code};
   fragment.delete('personal_calendar_state');
   fragment.delete('personal_calendar_code');
   url.hash=fragment.toString();

@@ -168,5 +168,38 @@ let server,browser,page,serve=true,writes=0,failWrites=false;
  await freshScenario();await page.goto(url+'?invite='+expired);await page.getByRole('alert').waitFor();assert.match(await page.getByRole('alert').innerText(),/already used/);assert.equal(await page.getByLabel(/^Password/).count(),0);pass('Expired, cancelled or used invitation shows recovery guidance before requesting a password');
  scenario='failure';await page.goto(url+'?invite='+code);await page.getByLabel('Email address',{exact:true}).waitFor();await fillAccount();await page.getByRole('button',{name:'Create my account',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await page.getByLabel('First name',{exact:true}).inputValue(),'Invited');assert.equal(await page.getByLabel('Last name',{exact:true}).inputValue(),'Person');await page.getByRole('button',{name:'Back',exact:true}).click();assert.equal(await page.getByLabel(/^Password/).inputValue(),'Fixture-password-123');pass('Service failure preserves entries for retry');
  await page.screenshot({path:path.join(out,'one-email-invitation.png'),fullPage:true});
+ await freshScenario();joined=true;role='member';
+ const legacy='https://zethhummel-rgb.github.io/hummel-home/';
+ const custom='https://test.hhfamily.ca/';
+ // Use the real addresses in the browser while serving only local fixtures.
+ await context.route(/^https:\/\/(?:zethhummel-rgb\.github\.io\/(?:hummel-home\/|__fixture_api\/)|test\.hhfamily\.ca\/)/,async route=>{
+  const target=new URL(route.request().url());
+  const relative=target.pathname.startsWith('/__fixture_api/')?target.pathname+target.search:
+   target.href.startsWith(legacy)?target.href.slice(legacy.length):target.href.slice(custom.length);
+  const response=await route.fetch({url:new URL(relative,url).href});
+  await route.fulfill({response});
+ });
+ async function signInHere(){
+  await page.getByLabel('Email address',{exact:true}).fill(user.email);
+  await page.getByLabel(/^Password/).fill('Fixture-password-123');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.locator('.mobile-nav').waitFor({state:'attached'});
+  await page.waitForLoadState('networkidle');
+ }
+ const signInCount=()=>requests.filter(x=>x.path.endsWith('/token')).length;
+ await page.goto(legacy);await signInHere();
+ await page.goto(custom);
+ await page.getByRole('heading',{name:'Welcome home.',exact:true}).waitFor();
+ await signInHere();
+ const initialSignIns=signInCount();
+ await page.goto(legacy);
+ await page.locator('.mobile-nav').waitFor({state:'attached'});
+ await page.waitForLoadState('networkidle');
+ await page.reload();
+ await page.locator('.mobile-nav').waitFor({state:'attached'});
+ await page.waitForLoadState('networkidle');
+ assert.equal(page.url(),legacy);
+ assert.equal(signInCount(),initialSignIns);
+ pass('Signing in at the new TEST address preserves the existing address and remembered sign-in');
  assert.deepEqual(errors,[]);pass('No runtime exceptions; all account and email requests intercepted');
 })().catch(async e=>{console.error(e);if(page)fs.writeFileSync(path.resolve(process.env.HH_POLISH_OUTPUT||'artifacts/polish','signup-failure.txt'),await page.locator('body').innerText().catch(()=>''));process.exitCode=1}).finally(async()=>{if(browser)await browser.close();if(server)server.close()});

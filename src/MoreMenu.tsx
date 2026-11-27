@@ -1,8 +1,8 @@
 import {useEffect,useRef} from 'react';
-import {BookOpen,ArrowRight,MessageSquare,NotebookPen,Utensils,X} from 'lucide-react';
+import {Bell,BookOpen,ArrowRight,MessageSquare,NotebookPen,Utensils,X} from 'lucide-react';
 import './more-menu.css';
 
-type Destination='Meals'|'Notes'|'Feedback'|'Help';
+type Destination='Meals'|'Notes'|'Updates'|'Feedback'|'Help';
 type Props={activeTab:string;opener:HTMLElement|null;onSelect:(destination:Destination)=>void;onClose:()=>void};
 
 export default function MoreMenu({activeTab,opener,onSelect,onClose}:Props){
@@ -31,6 +31,7 @@ export default function MoreMenu({activeTab,opener,onSelect,onClose}:Props){
    <div className="more-menu-options">
     <button ref={firstAction} type="button" className={'more-menu-option'+(activeTab==='Meals'?' is-current':'')} aria-current={activeTab==='Meals'?'page':undefined} data-tour="more-Meals" onClick={()=>choose('Meals')}><span className="round-icon sage"><Utensils size={22}/></span><span><b>Meal planner</b><small>Daily meals, favourites and ingredients.</small></span><ArrowRight size={18}/></button>
     <button type="button" className={'more-menu-option'+(activeTab==='Notes'?' is-current':'')} aria-current={activeTab==='Notes'?'page':undefined} data-tour="more-Notes" onClick={()=>choose('Notes')}><span className="round-icon sage"><NotebookPen size={22}/></span><span><b>Family notes</b><small>The useful details, shared together.</small></span><ArrowRight size={18}/></button>
+    <button type="button" className="more-menu-option" onClick={()=>choose('Updates')}><span className="round-icon sage"><Bell size={22}/></span><span><b>Notices &amp; updates</b><small>Catch up on announcements and changes to HH.</small></span><ArrowRight size={18}/></button>
     <button type="button" className="more-menu-option" data-tour="more-Feedback" onClick={()=>choose('Feedback')}><span className="round-icon sage"><MessageSquare size={22}/></span><span><b>Send Feedback</b><small>Share a comment or suggest a new feature.</small></span><ArrowRight size={18}/></button>
     <button type="button" className="more-menu-option" onClick={()=>choose('Help')}><span className="round-icon sage"><BookOpen size={22}/></span><span><b>Help &amp; tutorials</b><small>Practise on the real pages, step by step.</small></span><ArrowRight size={18}/></button>
    </div>

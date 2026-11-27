@@ -1,6 +1,6 @@
 import {createClient} from '@supabase/supabase-js';
 import type {AuthError,Session,SupabaseClient} from '@supabase/supabase-js';
-import {publicConfig,authNamespace} from './config';
+import {publicConfig,authNamespace,testEnvironment} from './config';
 import {createLoginStorage} from './loginStorage';
 import {createAccountSwitchStorage,switchEmail,type AccountReference} from './accountSwitchStorage';
 
@@ -10,14 +10,19 @@ let localSignOutWarning='';
 const loginStorage=createLoginStorage(()=>localStorage,()=>sessionStorage,()=>crypto.randomUUID(),notify,authNamespace);
 export const accountStorage=createAccountSwitchStorage(loginStorage,()=>crypto.randomUUID(),authNamespace);
 const authUrl=new URL(location.href),authFragment=new URLSearchParams(authUrl.hash.slice(1));
-export const recoveryEntry=authUrl.searchParams.has('code')||authUrl.searchParams.get('type')==='recovery'||authFragment.get('type')==='recovery';
-export const accountAuthReturn=authUrl.searchParams.has('code')||authFragment.has('access_token')||authFragment.has('refresh_token')||authFragment.get('type')==='recovery';
-export const accountSwitchBlocked=authUrl.searchParams.has('reset')||accountAuthReturn;
+// A TEST admin page can use a family session from this tab. Only the family
+// entry point may accept sign-in or recovery details from a URL.
+const testAdminEntry=testEnvironment&&/\/admin(?:\.html)?\/?$/.test(authUrl.pathname);
+const recoveryMarker=authUrl.searchParams.has('code')||authUrl.searchParams.get('type')==='recovery'||authFragment.get('type')==='recovery';
+const authReturnMarker=authUrl.searchParams.has('code')||authFragment.has('access_token')||authFragment.has('refresh_token')||authFragment.get('type')==='recovery';
+export const recoveryEntry=!testAdminEntry&&recoveryMarker;
+export const accountAuthReturn=!testAdminEntry&&authReturnMarker;
+export const accountSwitchBlocked=authUrl.searchParams.has('reset')||authReturnMarker||(testAdminEntry&&recoveryMarker);
 let activeChoice=accountStorage.initial(accountAuthReturn);
 let activeOptions=accountStorage.options(activeChoice);
 const client=(storage=activeOptions,detectSessionInUrl=true,autoRefreshToken=true)=>createClient(publicConfig.url,publicConfig.key,{auth:{persistSession:true,autoRefreshToken,detectSessionInUrl,...storage}});
 let activeStorageKey=activeChoice.key;
-export let supabase=recoveryEntry?createClient(publicConfig.url,publicConfig.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:true,storageKey:'hh-recovery-entry:v1'}}):client();
+export let supabase=recoveryEntry?createClient(publicConfig.url,publicConfig.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:true,storageKey:'hh-recovery-entry:v1'}}):client(activeOptions,!testAdminEntry);
 const recoveryClient=recoveryEntry?supabase:null;
 export const isRecoveryEntryClient=()=>supabase===recoveryClient;
 export const currentAccountStorage=()=>activeChoice;
