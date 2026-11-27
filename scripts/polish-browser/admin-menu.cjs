@@ -270,7 +270,9 @@ async function checkAdminPaletteSchedule(page,paletteWrites){
  const nav=page.getByRole('navigation',{name:'Admin Dashboard'});
  await nav.waitFor();
  const active=nav.locator('button[aria-current="page"]');
- assert.equal(await nav.getByRole('button').count(),5);
+ assert.deepEqual(await nav.getByRole('button').allTextContents(),[
+  'Pilot access','Notices & updates','Seasonal palettes','Feedback & ideas','App ratings','Releases',
+ ]);
  assert.equal(await active.innerText(),'Pilot access');
  await nav.getByRole('button',{name:'Seasonal palettes',exact:true}).click();
  const availability=page.getByRole('region',{name:'Theme availability'});
