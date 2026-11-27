@@ -597,7 +597,7 @@ async function run(){
    const ratingMember=['rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'].includes(state);
    const context=await browser.newContext({
     viewport:{width:390,height:844},
-    ...(state==='signout'?{serviceWorkers:'block'}:{}),
+    ...(['signout','member-content'].includes(state)?{serviceWorkers:'block'}:{}),
    });
    const localOrigin=new URL(url).origin;
    await context.route('**/*',route=>new URL(route.request().url()).origin===localOrigin?route.continue():route.abort('blockedbyclient'));
