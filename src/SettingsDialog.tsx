@@ -29,7 +29,7 @@ type Page='main'|'profile'|'appearance'|'notifications'|'household'|'calendar'|'
 const titles:Record<Page,string>={main:'Settings',profile:'Your profile',appearance:'Appearance',notifications:'Notifications',household:'Your household',calendar:'Calendar',help:'Help & tutorials',pilot:'Pilot invitations',admin:'Manage households',googleImport:'Import Google calendar',accounts:'Switch account',feedback:'Send Feedback',updates:'Notices & updates'};
 type Props={
  onInteractiveStart?:(id:string)=>void;
- initialPage?:'main'|'help'|'notifications'|'googleImport'|'household'|'feedback'|'calendar'|'updates';importError?:string;personalCalendarReturn?:'return'|'denied';outlookCalendarReturn?:'return'|'denied';onCalendarImported:()=>unknown;initialGuide?:'install';onGettingStarted:()=>void;
+ initialPage?:'main'|'help'|'notifications'|'googleImport'|'household'|'feedback'|'calendar'|'updates';opener?:HTMLElement;importError?:string;personalCalendarReturn?:'return'|'denied';outlookCalendarReturn?:'return'|'denied';onCalendarImported:()=>unknown;initialGuide?:'install';onGettingStarted:()=>void;
  name:string;email:string;userId:string;householdId:string;householdName:string;owner:boolean;members:Member[];people:HouseholdPerson[];
  paletteId:string;paletteMessage:string;seasonalPalettes:readonly SeasonalPaletteId[];onPaletteChange:(id:string)=>void;onColorSaved:(color:string)=>void;onHouseholdSaved:()=>unknown;
  calendarConnected:boolean;calendarLegacy:boolean;calendarTransition?:boolean;calendarCopyMessage:string;calendarConfigured:boolean;onOpenCalendar:()=>void;onConnectGoogle:()=>void;onWelcome:()=>void;onClose:()=>void;onSignOut:()=>unknown;
@@ -41,7 +41,12 @@ export default function SettingsDialog(props:Props){return <DraftScope><Settings
 function SettingsDialogBody(props:Props){
  const drafts=useDraftGroup()!;useModalScrollLock();
  const {initialPage='main',onInteractiveStart,importError,personalCalendarReturn,outlookCalendarReturn,onCalendarImported,initialGuide,onGettingStarted,name,email,userId,householdId,householdName,owner,members,people,paletteId,paletteMessage,seasonalPalettes,onPaletteChange,onColorSaved,onHouseholdSaved,calendarConnected,calendarLegacy,calendarTransition=false,calendarCopyMessage,calendarConfigured,onOpenCalendar,onConnectGoogle,onWelcome,onClose,onSignOut}=props;
- const [history,setHistory]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[visited,setVisited]=useState<Page[]>(()=>initialPage==='main'?['main']:initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage]),[host,setHost]=useState(false),[leaving,setLeaving]=useState(false),[error,setError]=useState('');
+ const {opener}=props;
+ const [history,setHistory]=useState<Page[]>(()=>{
+  if(initialPage==='main'||initialPage==='updates')return [initialPage];
+  return initialPage==='googleImport'?['main','calendar','googleImport']:['main',initialPage];
+ });
+ const [visited,setVisited]=useState<Page[]>(history),[host,setHost]=useState(false),[leaving,setLeaving]=useState(false),[error,setError]=useState('');
  const [profileDirty,setProfileDirty]=useState(false);
  const [feedbackDirty,setFeedbackDirty]=useState(false),[draftRevision,setDraftRevision]=useState(0);
  const finishingCalendar=testEnvironment&&initialPage==='calendar'&&(personalCalendarReturn==='return'||outlookCalendarReturn==='return');
@@ -51,7 +56,8 @@ function SettingsDialogBody(props:Props){
  const clearDrafts=useCallback(()=>{drafts.discardAll();setFeedbackDirty(false);setProfileDirty(false);setDraftRevision(v=>v+1)},[feedbackDirty,profileDirty,drafts.discardAll]);
  const closeSettings=()=>guard.requestClose(()=>{clearDrafts();onClose()});
  const page=history.at(-1)!,dialog=useRef<HTMLElement>(null),heading=useRef<HTMLHeadingElement>(null),content=useRef<HTMLDivElement>(null);
- const pageRef=useRef(page),closeRef=useRef(onClose),leavingRef=useRef(leaving);pageRef.current=page;closeRef.current=closeSettings;leavingRef.current=leaving;
+ const hasBack=history.length>1;
+ const hasBackRef=useRef(hasBack),closeRef=useRef(onClose),leavingRef=useRef(leaving);hasBackRef.current=hasBack;closeRef.current=closeSettings;leavingRef.current=leaving;
  const initials=name.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join('').toUpperCase();
  const member=members.find(m=>m.user_id===userId),palette=paletteById(paletteId);
  const peopleCount=members.length+people.filter(p=>!p.linked_user_id).length;
@@ -82,9 +88,9 @@ function SettingsDialogBody(props:Props){
   return()=>{active=false;subscription.unsubscribe()};
  },[authClient,userId]);
  useEffect(()=>{
-  const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const previous=opener??(document.activeElement instanceof HTMLElement?document.activeElement:null);
   const keys=(e:KeyboardEvent)=>{
-   if(e.key==='Escape'){e.preventDefault();if(leavingRef.current)return;if(finishingCalendar||pageRef.current==='main')closeRef.current();else backRef.current();return}
+   if(e.key==='Escape'){e.preventDefault();if(leavingRef.current)return;if(finishingCalendar||!hasBackRef.current)closeRef.current();else backRef.current();return}
    if(e.key!=='Tab')return;
    const nodes=Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary')||[]).filter(node=>node.getClientRects().length>0);
    const first=nodes[0],last=nodes.at(-1);
@@ -93,11 +99,11 @@ function SettingsDialogBody(props:Props){
   };
   document.addEventListener('keydown',keys);
   return()=>{document.removeEventListener('keydown',keys);if(previous?.isConnected)previous.focus({preventScroll:true})};
- },[finishingCalendar]);
+ },[finishingCalendar,opener]);
  useEffect(()=>{content.current?.scrollTo({top:0});heading.current?.focus();if(page==='help'&&initialGuide==='install'){const timer=setTimeout(()=>(content.current?.querySelector('[data-safari-install-guide]')||content.current?.querySelector('[data-install-guide]'))?.scrollIntoView({block:'start'}),0);return()=>clearTimeout(timer)}},[page,initialGuide]);
  const screen=(id:Page,children:ReactNode)=>visited.includes(id)?<div key={id+draftRevision} className={'settings-page settings-page-'+id} hidden={page!==id} inert={page!==id}>{children}</div>:null;
  return <div className={'settings-backdrop'+(finishingCalendar?' calendar-finish-backdrop':'')} onClick={e=>{if(e.target===e.currentTarget&&!leaving)closeSettings()}}><section className={'settings-dialog'+(finishingCalendar?' calendar-finish-dialog':'')} ref={dialog} role="dialog" aria-modal="true" aria-labelledby="settings-title">
-  <header className="settings-toolbar"><div>{finishingCalendar?<CalendarDays size={21} aria-hidden="true"/>:page==='main'?<img src="./icon.svg" alt="HH"/>:<button type="button" className="settings-back" disabled={leaving||drafts.busy} onClick={back} aria-label={`Back to ${titles[history.at(-2)||'main']}`}><ChevronLeft size={21}/>Back</button>}</div><h2 ref={heading} tabIndex={-1} id="settings-title">{finishingCalendar?(calendarSetupComplete?'Calendar connected':'Finish calendar setup'):titles[page]}</h2><button type="button" className="settings-toolbar-done" disabled={leaving||drafts.busy} onClick={closeSettings}>{finishingCalendar?'Close':'Done'}</button></header>
+  <header className="settings-toolbar"><div>{finishingCalendar?<CalendarDays size={21} aria-hidden="true"/>:!hasBack?<img src="./icon.svg" alt="HH"/>:<button type="button" className="settings-back" disabled={leaving||drafts.busy} onClick={back} aria-label={`Back to ${titles[history.at(-2)||'main']}`}><ChevronLeft size={21}/>Back</button>}</div><h2 ref={heading} tabIndex={-1} id="settings-title">{finishingCalendar?(calendarSetupComplete?'Calendar connected':'Finish calendar setup'):titles[page]}</h2><button type="button" className="settings-toolbar-done" disabled={leaving||drafts.busy} onClick={closeSettings}>{finishingCalendar?'Close':'Done'}</button></header>
   <div className="settings-content" ref={content} inert={leaving||drafts.busy} aria-busy={leaving||drafts.busy}>
    {finishingCalendar?(outlookCalendarReturn==='return'?
     <OutlookCalendar householdId={householdId} userId={userId} returned={outlookCalendarReturn} onSetupComplete={finishCalendarSetup} onSetupCancel={closeSettings}/>:
@@ -111,7 +117,7 @@ function SettingsDialogBody(props:Props){
      {canOpenAdmin&&<a className="settings-row settings-navigation-link" href="./admin.html" target={testEnvironment?undefined:'_blank'} rel={testEnvironment?undefined:'noopener'} onClick={event=>{if(!isCurrentAuthClient(authClient))event.preventDefault()}}><span className="settings-row-icon" aria-hidden="true"><ShieldCheck size={19}/></span><span className="settings-row-copy"><b>Admin Dashboard</b><small>Manage pilot requests and invitations</small></span><ChevronRight size={17} aria-hidden="true"/></a>}
      {canManageHouseholds&&<Row icon={<Users size={19}/>} title="Manage households" detail="Review and delete pilot households" onClick={()=>open('admin')}/>}
     </div></section>}
-    <section className="settings-group" aria-labelledby="settings-help"><h3 id="settings-help">A helping hand</h3><div className="settings-group-rows"><Row icon={<BookOpen size={19}/>} title="Help & tutorials" detail="Phone guides & the quick tour" onClick={()=>open('help')}/><Row icon={<Bell size={19}/>} title="Notices & updates" detail="Past announcements and what changed" onClick={()=>open('updates')}/><Row icon={<MessageSquare size={19}/>} title="Send Feedback" detail="Share a comment or suggest a new feature" onClick={()=>open('feedback')}/></div></section>
+    <section className="settings-group" aria-labelledby="settings-help"><h3 id="settings-help">A helping hand</h3><div className="settings-group-rows"><Row icon={<BookOpen size={19}/>} title="Help & tutorials" detail="Phone guides & the quick tour" onClick={()=>open('help')}/><Row icon={<MessageSquare size={19}/>} title="Send Feedback" detail="Share a comment or suggest a new feature" onClick={()=>open('feedback')}/></div></section>
     <div className="settings-account-footer"><small>Signed in as {email}</small><button type="button" disabled={leaving} onClick={async()=>{if(leavingRef.current)return;leavingRef.current=true;setLeaving(true);setError('');try{try{await stopDevicePush(householdId)}catch{}const result=await onSignOut();if(result&&typeof result==='object'&&'error' in result&&result.error)throw result.error}catch(e){setError((e as {message?:string}).message||'Could not sign out. Please try again.');leavingRef.current=false;setLeaving(false)}}}><LogOut size={15}/>{leaving?'Signing out…':pairedAccount?'Sign out of both accounts':'Sign out'}</button>{pairedAccount&&<small>{staySignedIn()?'Removes both saved sign-ins from this device.':'Removes both sign-ins from this tab.'}</small>}</div>
     {error&&<p className="error" role="alert">{error}</p>}
     <button type="button" className="button primary wide settings-finish" disabled={leaving||drafts.busy} onClick={closeSettings}>Done<Check size={17}/></button>
