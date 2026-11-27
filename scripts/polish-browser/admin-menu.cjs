@@ -17,6 +17,7 @@ const b64=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 const session={access_token:[b64({alg:'HS256',typ:'JWT'}),b64({exp,sub:user.id,aud:'authenticated',session_id:home}),'fixture'].join('.'),refresh_token:'fixture',expires_in:authLifetime,expires_at:exp,token_type:'bearer',user};
 const member={user_id:user.id,display_name:'Fixture Admin',role:'owner',household_id:home};
 const basePaletteKey='home-together:palette:'+user.id;
+const rememberedAuthKey='hh-test:hh-test:home-together-auth';
 const notices=[
  {id:'notice-fixture',kind:'notice',title:'Holiday support hours',body:'Support will be back Tuesday.\nThanks for your patience.',published_at:'2026-11-26T17:00:00Z'},
  {id:'update-fixture',kind:'update',title:'New calendar features',body:'See the weekly agenda on Home.',published_at:'2026-11-25T15:00:00Z'},
@@ -565,21 +566,24 @@ async function run(){
    const releaseScenario=['admin-releases','admin-release-disconnected'].includes(state);
    const approved=releaseScenario||['authorized','authorized-visit','callback','signout','admin-notice-image','admin-palette-schedule'].includes(state);
    const ratingMember=['rating-submit','rating-dismiss','rating-no-comment','rating-unquoted'].includes(state);
-   const context=await browser.newContext({viewport:{width:390,height:844}});
+   const context=await browser.newContext({
+    viewport:{width:390,height:844},
+    ...(state==='signout'?{serviceWorkers:'block'}:{}),
+   });
    const localOrigin=new URL(url).origin;
    await context.route('**/*',route=>new URL(route.request().url()).origin===localOrigin?route.continue():route.abort('blockedbyclient'));
    await context.routeWebSocket('**/*',socket=>socket.close());
    await context.addInitScript(redirectFixtureAPI);
-   await context.addInitScript(({session,key,state})=>{
+   await context.addInitScript(({session,key,state,rememberedAuthKey})=>{
     if(sessionStorage.getItem('admin-menu-fixture'))return;
     if(state==='authorized-visit'){
      sessionStorage.setItem('hh-test:hh:login-choice:v1','visit');
      sessionStorage.setItem('hh-test:hh:login-visit:v1','admin-menu-visit');
      sessionStorage.setItem('hh-test:hh-test:hh:visit-auth:v1:admin-menu-visit',JSON.stringify(session));
-    }else if(state!=='signed-out')localStorage.setItem('hh-test:hh-test:home-together-auth',JSON.stringify(session));
+    }else if(state!=='signed-out')localStorage.setItem(rememberedAuthKey,JSON.stringify(session));
     localStorage.setItem(key,'sage');
     sessionStorage.setItem('admin-menu-fixture','1');
-   },{session,key:basePaletteKey,state});
+   },{session,key:basePaletteKey,state,rememberedAuthKey});
    const {promise:adminCheck,resolve:checked}=Promise.withResolvers();
    const {promise:waitToReply,resolve:reply}=Promise.withResolvers();
    let activeSeasons=state==='member-palettes'?seasonalPaletteIds:['spring','spring','unknown'];
@@ -629,6 +633,7 @@ async function run(){
     else if(target.pathname.startsWith('/auth/')){
      if(name==='user')accountChecks++;
      if(name==='token')tokenRequests++;
+     if(name==='logout'&&state==='signout')return route.fulfill({status:204});
      data=user;
     }
     else if(target.pathname.includes('/functions/')&&name==='hh-release-dispatch'){
@@ -795,9 +800,17 @@ async function run(){
     assert.equal(await Promise.race([adminCheck,delay(10000,false,{ref:false})]),true,`Admin status fixture was not reached for ${state}`);
     const link=page.getByRole('link',{name:/Admin Dashboard/});
     if(state==='signout'){
-     await page.getByRole('button',{name:'Sign out',exact:true}).click();
-     await page.getByRole('heading',{name:'Welcome home.'}).waitFor();
-     reply();
+     try{
+      assert.ok(await page.evaluate(key=>localStorage.getItem(key),rememberedAuthKey),'The race starts with a saved sign-in');
+      await page.getByRole('button',{name:'Sign out',exact:true}).click();
+      // Sign-out can replace the document while the old role request is pending.
+      // Observe the durable change before releasing the stale approval.
+      await page.waitForFunction(key=>localStorage.getItem(key)===null,rememberedAuthKey);
+     }catch(error){
+      const screen=await page.locator('body').innerText({timeout:2000}).catch(()=>'page unavailable');
+      throw new Error('Sign-out did not clear the fixture session. Screen: '+screen.slice(0,600),{cause:error});
+     }finally{reply()}
+     await page.getByRole('heading',{name:'Welcome home.',exact:true}).waitFor();
      assert.equal(await link.count(),0);
      await page.goto(adminUrl);
      await checkAdminBlocked(page);
@@ -816,7 +829,7 @@ async function run(){
       assert.ok(dashboardChecks>0);
       assert.equal(await page.locator('input[type="password"]').count(),0);
       assert.equal(context.pages().length,1);
-      if(state==='authorized-visit')assert.equal(await page.evaluate(()=>localStorage.getItem('hh-test:hh-test:home-together-auth')),null);
+      if(state==='authorized-visit')assert.equal(await page.evaluate(key=>localStorage.getItem(key),rememberedAuthKey),null);
       if(state==='admin-notice-image')await checkAdminNoticeImage(page,noticeWrites,storageRequests);
       if(state==='admin-palette-schedule')await checkAdminPaletteSchedule(page,paletteWrites);
       if(releaseScenario)await checkAdminReleases(page,state==='admin-releases',draftWrites,dispatchWrites,storageRequests,
