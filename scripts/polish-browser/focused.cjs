@@ -3,7 +3,7 @@ const {launchBrowser}=require('./browser.cjs');
 const {setFixtureHandler,serveFixture,redirectFixtureAPI}=require('./fixture-api.cjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const dir=path.resolve('dist'),home='11111111-1111-4111-8111-111111111111',uid='22222222-2222-4222-8222-222222222222';
-const user={id:uid,email:'hummelhomeapp@gmail.com',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
+const user={id:uid,email:'zethhummel@gmail.com',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{provider:'email'},email_confirmed_at:'2026-01-01'};
 const member={user_id:uid,display_name:'Alex Morgan',role:'member',household_id:home};
 const products=['Milk','Bread','Eggs'].map((title,i)=>({id:'33333333-3333-4333-8333-33333333333'+i,title,category:'Dairy & eggs',kind:'grocery',done:false,household_id:home,reminder_version:1,person:'Everyone',created_at:'2026-01-01',grocery_store:'Test market'}));
 products.push({id:'44444444-4444-4444-8444-444444444444',household_id:home,kind:'task',title:'Book camp tickets',category:'Other',person:'Everyone',done:true,due:'2026-10-01',reminder_version:1,created_at:'2026-01-01'});
@@ -49,6 +49,8 @@ let managedHomes=[
    if (u.pathname.startsWith('/auth/'))data=user;
    else if(table==='record_household_use'){assert.deepEqual(req.postDataJSON(),{target_household:home});householdUseReports++;data=null;}
    else if(table==='pilot_status')data={is_host:true};
+   else if(table==='hh_admin_status')data={is_admin:true,requires_mfa:false};
+   else if(table==='hh_admin_dashboard')data={requests:[],invitations:[],capacity:{used:0,total:14}};
    else if(table==='event-addresses'){
     const {query,placeId}=req.postDataJSON();if(query)addressLookups.push(query);
     data=query==='999 Limit'?{status:'paused',suggestions:[]}:
@@ -123,7 +125,10 @@ let managedHomes=[
  await page.getByRole('button',{name:'Open Settings',exact:true}).click();
  await activityReport;
  assert.equal(householdUseReports,reportsBeforeInteraction+1,'Using the existing session records activity again');
- await page.getByRole('button',{name:/^Manage households/}).click();
+ assert.equal(await page.getByRole('button',{name:/^Manage households/}).count(),0,'Settings has no separate household-management screen');
+ await page.getByRole('link',{name:/^Admin Dashboard/}).click();
+ await page.getByRole('navigation',{name:'Admin Dashboard'}).getByRole('button',{name:'Manage households',exact:true}).click();
+ await page.getByRole('heading',{name:'Manage households',exact:true}).waitFor();
  const recorded=page.locator('.admin-household-row').filter({hasText:'Recorded home'});
  const signedIn=page.locator('.admin-household-row').filter({hasText:'Sign-in only'});
  await recorded.getByText(/Last used:/).waitFor();
@@ -141,8 +146,8 @@ let managedHomes=[
  await openDelete.click();
  await page.waitForFunction(()=>document.activeElement?.id==='admin-household-confirm-title');
  const formBounds=await confirmation.boundingBox();
- const listBounds=await page.locator('.settings-content').boundingBox();
- assert(formBounds&&listBounds&&formBounds.y>=listBounds.y&&formBounds.y+formBounds.height<=listBounds.y+listBounds.height+1,'The confirmation is in the visible area of the mobile household list');
+ const viewport=page.viewportSize();
+ assert(formBounds&&viewport&&formBounds.y>=-1&&formBounds.y+formBounds.height<=viewport.height+1,'The confirmation is in the visible area of the mobile dashboard');
  await confirmName.fill('Other household');
  assert(await confirmDelete.isDisabled());
  assert.equal(deleteAttempts,0);
@@ -161,7 +166,8 @@ let managedHomes=[
  assert.equal(deleteAttempts,2);
  assert.match(await recorded.locator('time').innerText(),/Nov 15, 2026.*2:28.*ET/i);
  pass('Mobile household deletion stays in view, preserves confirmation safeguards, and supports retry after an error');
- await page.getByRole('button',{name:'Done',exact:true}).click();
+ await page.getByRole('link',{name:/^Open HH/}).click();
+ await page.locator('.home-family-name').first().waitFor();
  const consentReturn=url+'?personal_calendar=return#'+new URLSearchParams({personal_calendar_state:personalCalendarState,personal_calendar_code:'fixture-code'});
  await page.route('https://accounts.google.com/**',route=>route.fulfill({
   contentType:'text/html',body:'<script>location.replace('+JSON.stringify(consentReturn)+')</script>'
