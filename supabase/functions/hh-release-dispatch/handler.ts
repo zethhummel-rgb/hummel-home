@@ -102,7 +102,9 @@ export function makeReleaseHandler(config: ReleaseConfig, services: ReleaseServi
     if (!admin?.canRelease) return json({error: 'HH Admin access is required.'}, 403);
     const isOperator = admin.id === config.operatorId;
     if (body.action === 'availability') return json({dispatch_ready: dispatchConfigured && isOperator, target: 'TEST'});
-    if (body.action !== 'release' && body.action !== 'retry_announcement') return json({error: 'Unsupported release action.'}, 400);
+    if (body.action !== 'release' && body.action !== 'release_quietly' && body.action !== 'retry_announcement') {
+      return json({error: 'Unsupported release action.'}, 400);
+    }
     if (!isOperator) return json({error: 'Release approval is limited to the designated HH TEST operator.'}, 403);
     if (!dispatchConfigured) return json({error: 'The HH TEST release connection is not configured.'}, 503);
     if (typeof body.release_id !== 'string' || !uuid.test(body.release_id)) return json({error: 'Choose a prepared release.'}, 400);
@@ -119,7 +121,7 @@ export function makeReleaseHandler(config: ReleaseConfig, services: ReleaseServi
       }
       if (typeof body.expected_updated_at !== 'string' || body.expected_updated_at.length > 64
         || !Number.isFinite(Date.parse(body.expected_updated_at))) return json({error: 'Refresh the release and review its draft.'}, 400);
-      await services.worker('queue', {
+      await services.worker(body.action === 'release_quietly' ? 'queue_quiet' : 'queue', {
         release_id: body.release_id, actor_id: admin.id, expected_updated_at: body.expected_updated_at,
       });
     } catch {
